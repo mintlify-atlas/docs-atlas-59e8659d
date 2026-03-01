@@ -1,0 +1,242 @@
+---
+title: Collections and bookmarks
+description: Organize and save your important screenshots with bookmarks and collections in RewindOS
+---
+
+RewindOS provides two powerful ways to organize your screenshots: bookmarks for quick access to individual important moments, and collections for grouping related screenshots together.
+
+## Bookmarks
+
+Bookmarks let you mark individual screenshots as important for quick access later. Think of them as "favorites" or "starred" items in your timeline.
+
+### Bookmarking a screenshot
+
+<Steps>
+  <Step title="Find your screenshot">
+    Navigate to any screenshot in Search, History, or other views
+  </Step>
+  
+  <Step title="Click the star icon">
+    Click the star icon that appears on the screenshot thumbnail. The star will fill with yellow to indicate it's bookmarked
+  </Step>
+  
+  <Step title="Access your bookmarks">
+    Go to the Saved view in the sidebar and select the Bookmarks tab to see all your bookmarked screenshots
+  </Step>
+</Steps>
+
+<Tip>
+You can bookmark screenshots from anywhere in the app - search results, history timeline, collections, or the screenshot detail view.
+</Tip>
+
+### Viewing bookmarked screenshots
+
+All your bookmarked screenshots are available in the Saved view under the Bookmarks tab:
+
+1. Open the sidebar navigation
+2. Click on **Saved**
+3. Select the **Bookmarks** tab
+
+Your bookmarks are displayed in a grid layout showing:
+- Screenshot thumbnail
+- Application name and icon
+- Window title
+- Timestamp (relative time)
+- Optional note (if added)
+
+Click any bookmarked screenshot to view it in full detail.
+
+### Removing bookmarks
+
+To remove a bookmark, simply click the filled star icon on any bookmarked screenshot. The star will become outlined, indicating the bookmark has been removed.
+
+<Info>
+Removing a bookmark doesn't delete the screenshot - it only removes it from your bookmarks list. The screenshot remains accessible through search and history.
+</Info>
+
+## Collections
+
+Collections are custom groups of screenshots that help you organize related moments together. You can create collections for projects, meetings, research topics, or any other category that makes sense for your workflow.
+
+### Creating a collection
+
+<Steps>
+  <Step title="Navigate to collections">
+    Go to the Saved view and click the **Collections** tab
+  </Step>
+  
+  <Step title="Click 'New Collection'">
+    Click the **New Collection** button in the top-right corner
+  </Step>
+  
+  <Step title="Name your collection">
+    Enter a name for your collection and press Enter or click **Create**
+  </Step>
+</Steps>
+
+Each collection automatically gets:
+- A unique color for visual identification
+- A creation timestamp
+- A screenshot counter that updates automatically
+
+### Adding screenshots to collections
+
+There are several ways to add screenshots to a collection:
+
+<Tabs>
+  <Tab title="From screenshot detail">
+    1. Open any screenshot in the detail view
+    2. Look for the collection picker (if available in your version)
+    3. Select the collection to add the screenshot to
+  </Tab>
+  
+  <Tab title="From search or history">
+    1. Find the screenshot you want to add
+    2. Use the context menu or action buttons
+    3. Select "Add to Collection"
+    4. Choose your target collection
+  </Tab>
+</Tabs>
+
+<Note>
+The specific UI for adding screenshots to collections may vary depending on your RewindOS version. The core functionality uses the `add_to_collection` command from lib.rs:1136-1144.
+</Note>
+
+### Viewing collection contents
+
+To view all screenshots in a collection:
+
+1. Go to **Saved** → **Collections**
+2. Click on any collection in the list
+3. Browse the screenshots in a grid layout
+
+The collection detail view shows:
+- Collection name and color
+- Description (if set)
+- Time range indicator (for time-based collections)
+- Total screenshot count
+- Grid of all screenshots in the collection
+
+### Managing collections
+
+<Accordion title="Renaming or editing a collection">
+Collection editing is handled through the `update_collection` command. You can update:
+- Name
+- Description
+- Color
+- Time range (start_time and end_time)
+
+The specific UI for editing may vary by version.
+</Accordion>
+
+<Accordion title="Removing screenshots from collections">
+From the collection detail view:
+
+1. Hover over any screenshot
+2. Click the X icon that appears in the top-right corner
+3. The screenshot will be removed from the collection
+
+<Info>
+Time-range collections (collections with start_time and end_time set) don't show the remove button, as they automatically include all screenshots within the specified time period.
+</Info>
+</Accordion>
+
+<Accordion title="Deleting a collection">
+To permanently delete a collection:
+
+1. Go to the Collections tab in Saved view
+2. Hover over the collection you want to delete
+3. Click the trash icon that appears
+4. Confirm the deletion
+
+<Warning>
+Deleting a collection only removes the collection itself, not the screenshots it contains. Your screenshots remain safe in your timeline and can still be accessed through search and history.
+</Warning>
+</Accordion>
+
+## Collection types
+
+RewindOS supports two types of collections:
+
+<CardGroup cols={2}>
+  <Card title="Manual collections" icon="hand">
+    Created by you with a custom name. Add and remove screenshots manually to organize them however you like.
+  </Card>
+  
+  <Card title="Time-range collections" icon="clock">
+    Automatically include all screenshots captured within a specific time period. Perfect for capturing everything from a meeting, work session, or project sprint.
+  </Card>
+</CardGroup>
+
+Time-range collections are identified by a clock icon and include `start_time` and `end_time` properties. They dynamically update as you capture more screenshots within the specified time range.
+
+## Technical reference
+
+For developers integrating with RewindOS, the following Tauri commands are available:
+
+### Bookmark commands
+
+| Command | Parameters | Returns | Description |
+|---------|-----------|---------|-------------|
+| `toggle_bookmark` | `screenshot_id: i64`, `note: Option<String>` | `bool` | Toggles bookmark status for a screenshot. Returns `true` if bookmarked, `false` if unbookmarked |
+| `is_bookmarked` | `screenshot_id: i64` | `bool` | Checks if a screenshot is bookmarked |
+| `get_bookmarked_ids` | `screenshot_ids: Vec<i64>` | `Vec<i64>` | Returns IDs of bookmarked screenshots from a given list |
+| `list_bookmarks` | `limit: Option<i64>`, `offset: Option<i64>` | `Vec<BookmarkEntry>` | Lists all bookmarks with pagination (default limit: 100) |
+
+### Collection commands
+
+| Command | Parameters | Returns | Description |
+|---------|-----------|---------|-------------|
+| `create_collection` | `collection: NewCollection` | `i64` | Creates a new collection and returns its ID |
+| `update_collection` | `id: i64`, `update: UpdateCollection` | `()` | Updates collection properties |
+| `delete_collection` | `id: i64` | `()` | Permanently deletes a collection |
+| `list_collections` | None | `Vec<Collection>` | Lists all collections |
+| `get_collection_screenshots` | `id: i64`, `limit: Option<i64>`, `offset: Option<i64>` | `Vec<TimelineEntry>` | Gets screenshots in a collection (default limit: 200) |
+| `add_to_collection` | `collection_id: i64`, `screenshot_id: i64` | `()` | Adds a screenshot to a collection |
+| `remove_from_collection` | `collection_id: i64`, `screenshot_id: i64` | `()` | Removes a screenshot from a collection |
+
+See `/home/daytona/workspace/source/src-tauri/src/lib.rs:1010-1155` for implementation details.
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="Project documentation" icon="folder">
+    Create collections for each project to keep all relevant screenshots organized and easy to review.
+  </Card>
+  
+  <Card title="Research and learning" icon="book">
+    Bookmark key moments while learning new tools or researching topics, then organize them into subject-specific collections.
+  </Card>
+  
+  <Card title="Bug reports" icon="bug">
+    Quickly collect screenshots showing steps to reproduce an issue, then share the collection with your team.
+  </Card>
+  
+  <Card title="Meeting notes" icon="users">
+    Use time-range collections to automatically capture everything from a meeting, or manually bookmark key decisions and action items.
+  </Card>
+</CardGroup>
+
+## Best practices
+
+<Steps>
+  <Step title="Use descriptive collection names">
+    Name your collections clearly so you can find them quickly later. Examples: "Q1 Design Sprint", "Python Tutorial", "Client Demo 2026-03-01"
+  </Step>
+  
+  <Step title="Bookmark in the moment">
+    When you see something important, bookmark it immediately while you remember the context
+  </Step>
+  
+  <Step title="Regular cleanup">
+    Periodically review your bookmarks and collections to remove outdated items and keep your organization system effective
+  </Step>
+  
+  <Step title="Combine with search">
+    Use search to find related screenshots, then add them to a collection for permanent organization
+  </Step>
+</Steps>
+
+<Tip>
+Collections and bookmarks work together with RewindOS's search and AI features. Bookmark individual insights, organize them into collections, then use the Ask feature to query specific collections for deeper analysis.
+</Tip>

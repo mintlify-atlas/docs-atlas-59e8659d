@@ -1,0 +1,300 @@
+---
+title: Journal
+description: Capture daily thoughts, reflections, and memories with RewindOS's built-in journaling system
+---
+
+The Journal feature in RewindOS helps you document your day, track your mood, and reflect on your activities. It combines a powerful markdown editor with automatic context from your captured screenshots, creating a rich daily record of your work and life.
+
+## Getting started
+
+Access the Journal from the main navigation. Each day has its own entry, automatically created when you start writing.
+
+<Steps>
+  <Step title="Navigate to a date">
+    Use the date navigation arrows or click the date to jump to today. Navigate between days with `Alt+Left` and `Alt+Right`.
+  </Step>
+  
+  <Step title="Start writing">
+    The editor supports markdown formatting, task lists, headings, and more. Changes are automatically saved every 800ms.
+  </Step>
+  
+  <Step title="Add context">
+    Attach screenshots from your day, add tags to categorize entries, and use memory jogger prompts to recall what you worked on.
+  </Step>
+</Steps>
+
+## Writing and formatting
+
+The journal uses a rich markdown editor powered by TipTap, with support for:
+
+### Basic formatting
+
+Select text to reveal the bubble menu with quick formatting options:
+
+- **Bold** (Ctrl+B)
+- *Italic* (Ctrl+I)
+- <u>Underline</u> (Ctrl+U)
+- ~~Strikethrough~~
+- `Inline code`
+- ==Highlight==
+- [Links](#)
+
+### Slash commands
+
+Type `/` anywhere in your entry to access structural elements:
+
+<Tabs>
+  <Tab title="Headings">
+    - Heading 1
+    - Heading 2
+    - Heading 3
+  </Tab>
+  
+  <Tab title="Lists">
+    - Bullet List
+    - Ordered List
+    - Task List (checkboxes)
+  </Tab>
+  
+  <Tab title="Blocks">
+    - Quote
+    - Code Block
+    - Divider
+  </Tab>
+</Tabs>
+
+### Task lists
+
+Create interactive task lists using the slash menu or markdown syntax:
+
+```markdown
+- [ ] Unchecked task
+- [x] Completed task
+```
+
+<Info>
+Unchecked tasks from yesterday are automatically carried forward to today's entry when you first open it.
+</Info>
+
+## Organizing entries
+
+### Tags
+
+Add tags to categorize and organize your journal entries:
+
+1. Click the **+ Add tags** button below the date navigation
+2. Start typing a tag name
+3. Press Enter to create a new tag or select from existing tags
+
+Tags are color-coded and can be used to:
+- Categorize entries by project, mood, or activity
+- Filter entries in search results
+- Track recurring themes over time
+
+### Search
+
+Find specific entries using full-text search:
+
+<Steps>
+  <Step title="Open search">
+    Click the search icon in the top navigation or press the keyboard shortcut.
+  </Step>
+  
+  <Step title="Enter your query">
+    Search works across all journal content, including tags and metadata.
+  </Step>
+  
+  <Step title="Navigate to results">
+    Click any result to jump directly to that date's entry. Results show snippets with search terms highlighted.
+  </Step>
+</Steps>
+
+## Attaching screenshots
+
+Connect your journal entries to what you were actually doing by attaching screenshots from that day.
+
+### How to attach screenshots
+
+1. Click **Attach** at the bottom of the editor
+2. Choose between two modes:
+   - **Browse**: View all screenshots from the selected day, optionally filtered by application
+   - **Search**: Search across all screenshots using the full RewindOS search
+3. Click any screenshot to attach it to the entry
+
+<Note>
+Screenshot attachments are automatically filtered to show only screenshots captured on the selected day when browsing.
+</Note>
+
+### Working with attachments
+
+- Click an attached screenshot to view it in full screen
+- Remove attachments using the X button on each thumbnail
+- Attached screenshots appear at the bottom of the editor
+
+## AI-powered features
+
+When Ollama is configured, the Journal unlocks additional AI capabilities:
+
+### AI summaries
+
+Generate intelligent summaries of your journal entries:
+
+<Accordion title="Weekly summaries">
+  Summarizes all entries from the current week (Monday-Sunday), identifying themes, mood trends, and notable events.
+</Accordion>
+
+<Accordion title="Monthly summaries">
+  Provides a broader view of the entire month, highlighting patterns and significant moments.
+</Accordion>
+
+<Info>
+Summaries are cached after generation. Click the refresh icon to regenerate with fresh insights.
+</Info>
+
+### Memory jogger prompts
+
+The sidebar shows context-aware prompts based on your activity:
+
+- Apps you spent significant time in
+- Windows you had open for extended periods
+- Screenshot counts and activity patterns
+
+Click any prompt to insert it into your entry as a blockquote, helping you remember what to write about.
+
+## Tracking streaks
+
+Build a daily journaling habit with the streak tracker:
+
+- **Current streak**: Consecutive days with journal entries
+- **Longest streak**: Your personal best
+- **Total entries**: Lifetime count
+
+The calendar heatmap visualizes your journaling activity, with darker colors indicating longer entries.
+
+<Tip>
+Even a few sentences count toward your streak. The goal is consistency, not perfection.
+</Tip>
+
+## Exporting entries
+
+Export your journal entries as markdown files for backup or use in other applications:
+
+<Steps>
+  <Step title="Open export dialog">
+    Click the export button in the right sidebar.
+  </Step>
+  
+  <Step title="Select date range">
+    Choose the start and end dates for your export.
+  </Step>
+  
+  <Step title="Export and copy">
+    Click **Export as Markdown** to generate the export. Copy the markdown to your clipboard or save it as a file.
+  </Step>
+</Steps>
+
+The export includes:
+- All entry content with full markdown formatting
+- Dates and metadata
+- Word counts for each entry
+
+## Keyboard shortcuts
+
+<CardGroup cols={2}>
+  <Card title="Alt + Left" icon="arrow-left">
+    Previous day
+  </Card>
+  
+  <Card title="Alt + Right" icon="arrow-right">
+    Next day
+  </Card>
+  
+  <Card title="Ctrl + B" icon="bold">
+    Bold text
+  </Card>
+  
+  <Card title="Ctrl + I" icon="italic">
+    Italic text
+  </Card>
+  
+  <Card title="Ctrl + U" icon="underline">
+    Underline text
+  </Card>
+  
+  <Card title="/" icon="command">
+    Slash command menu
+  </Card>
+</CardGroup>
+
+## Technical reference
+
+The Journal feature is implemented using several Tauri commands in `lib.rs:1159-1462`:
+
+### Core commands
+
+- `get_journal_entry(date)` - Fetch a specific entry by date key (YYYY-MM-DD)
+- `upsert_journal_entry(entry)` - Create or update an entry
+- `delete_journal_entry(date)` - Remove an entry
+
+### Calendar and metadata
+
+- `get_journal_dates(start_date, end_date)` - Fetch metadata for calendar heatmap
+- `get_journal_streak()` - Calculate current and longest streak
+- `get_open_todos(start_date, end_date)` - Find unchecked tasks in date range
+
+### Screenshot attachments
+
+- `add_journal_screenshot(entry_id, screenshot_id, caption?)` - Attach a screenshot
+- `remove_journal_screenshot(entry_id, screenshot_id)` - Detach a screenshot
+- `get_journal_screenshots(entry_id)` - List all attachments for an entry
+
+### Organization
+
+- `set_journal_tags(entry_id, tags)` - Update tags for an entry
+- `get_journal_tags(entry_id)` - Fetch tags for a specific entry
+- `list_all_journal_tags()` - Get all tags used across all entries
+- `search_journal(query, limit?, offset?)` - Full-text search with pagination
+
+### Templates
+
+- `list_journal_templates()` - Get saved templates
+- `create_journal_template(name, description?, content)` - Save a new template
+- `delete_journal_template(id)` - Remove a template
+
+### AI features
+
+- `generate_journal_summary(period_type, period_key, start_date, end_date, force_regenerate?)` - Generate AI summary
+- `export_journal(start_date, end_date)` - Export entries as markdown
+
+<Warning>
+AI features require Ollama to be running and properly configured in Settings. Summaries use the model specified in your chat configuration.
+</Warning>
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Write consistently" icon="calendar-check">
+    Even brief daily entries help build the habit and create a valuable record over time.
+  </Card>
+  
+  <Card title="Use tags strategically" icon="tags">
+    Develop a consistent tagging system to make entries easier to find and review later.
+  </Card>
+  
+  <Card title="Attach screenshots" icon="image">
+    Screenshots provide visual context and help jog your memory when reviewing old entries.
+  </Card>
+  
+  <Card title="Review summaries" icon="sparkles">
+    Use AI summaries to reflect on patterns and themes in your work and life.
+  </Card>
+</CardGroup>
+
+## Privacy and storage
+
+All journal entries are stored locally in your RewindOS SQLite database. Your thoughts, reflections, and personal notes never leave your machine.
+
+- Entries are saved automatically with debounced writes
+- Full-text search uses SQLite FTS5 for fast, private search
+- AI summaries are generated locally via Ollama (no cloud API required)
+- Export functionality gives you full control over your data
