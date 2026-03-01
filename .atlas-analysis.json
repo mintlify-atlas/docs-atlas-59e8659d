@@ -1,0 +1,97 @@
+{
+  "projectType": "saas",
+  "projectName": "RewindOS",
+  "projectDescription": "Privacy-first screen capture and search for Linux with AI-powered search and productivity tracking.",
+  "theme": "aspen",
+  "primaryColor": "#8B5CF6",
+  "lightColor": "#A78BFA",
+  "darkColor": "#6D28D9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "installation", "quickstart"]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/search",
+              "features/history",
+              "features/ai-chat",
+              "features/focus-mode",
+              "features/dashboard"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/overview",
+              "configuration/capture-settings",
+              "configuration/privacy-controls",
+              "configuration/ai-integration"
+            ]
+          },
+          {
+            "group": "Usage Guides",
+            "pages": [
+              "guides/daemon-control",
+              "guides/keyboard-shortcuts",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Technical Reference",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "technical/architecture",
+              "technical/capture-pipeline",
+              "technical/database-schema",
+              "technical/search-architecture"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "pages": [
+              "api/dbus-interface",
+              "api/tauri-commands"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/building",
+              "development/project-structure",
+              "development/contributing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Full-text search with sub-100ms queries across screen history",
+    "AI-powered semantic search and chat via Ollama",
+    "Intelligent screenshot deduplication with perceptual hashing",
+    "Privacy controls with app and window title exclusions",
+    "Focus mode with Pomodoro timer and productivity tracking",
+    "Activity dashboard with app usage analytics",
+    "Timeline browsing for chronological screen history",
+    "Global hotkey instant search (Ctrl+Shift+Space)"
+  ],
+  "publicApiSurface": [
+    "D-Bus Interface: com.rewindos.Daemon",
+    "D-Bus Methods: Pause(), Resume(), GetStatus(), GetStats()",
+    "Tauri Commands: search(), get_screenshot(), get_history()",
+    "Tauri Commands: start_chat_session(), send_chat_message()",
+    "Tauri Commands: get_dashboard_stats(), update_config()",
+    "CLI: rewindos-daemon pause|resume|status|backfill",
+    "Configuration: ~/.rewindos/config.toml"
+  ]
+}
