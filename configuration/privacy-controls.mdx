@@ -1,0 +1,515 @@
+---
+title: "Privacy Controls"
+description: "Configure application and window exclusions to protect sensitive information from being captured"
+---
+
+## Overview
+
+RewindOS is designed with privacy as a core principle. All data stays local in `~/.rewindos/`, and you have fine-grained control over what gets captured using the `[privacy]` section.
+
+<Note>
+**Privacy by Default**: RewindOS excludes common password managers and incognito windows by default.
+</Note>
+
+## Privacy Configuration
+
+The `[privacy]` section in `config.toml` provides two mechanisms for exclusion:
+
+1. **Application-based exclusion**: Skip capture when specific apps are active
+2. **Title pattern exclusion**: Skip capture when window titles match patterns
+
+### Default Privacy Settings
+
+From `config.rs:154`:
+
+```toml
+[privacy]
+excluded_apps = [
+    "rewindos",
+    "com.jay.rewindos",
+    "keepassxc",
+    "1password",
+    "bitwarden",
+    "gnome-keyring"
+]
+excluded_title_patterns = [
+    "Private Browsing",
+    "Incognito",
+    "Lock Screen",
+    "Screen Locker"
+]
+```
+
+## Application Exclusions
+
+<ParamField path="privacy.excluded_apps" type="array<string>" default='["keepassxc", "1password", "bitwarden", "gnome-keyring"]'>
+  List of application names or bundle identifiers to exclude from capture. When any of these apps are active, the capture is skipped.
+  
+  **How it works:**
+  - The daemon fetches active window metadata via `window_info/` providers
+  - On Wayland: Uses `wlr-foreign-toplevel-management-v1` protocol or KWin D-Bus
+  - On X11: Uses `_NET_ACTIVE_WINDOW` property
+  - The app name is matched against this list (case-insensitive substring match)
+  - If matched, the frame is dropped before hashing/OCR/storage
+  
+  ```toml
+  [privacy]
+  excluded_apps = [
+      "keepassxc",
+      "1password",
+      "bitwarden",
+      "gnome-keyring",
+      "rewindos",
+      "com.jay.rewindos"
+  ]
+  ```
+</ParamField>
+
+### Adding Custom Application Exclusions
+
+<Steps>
+  <Step title="Find the app identifier">
+    Use your desktop environment's window inspector or run:
+    
+    **On Wayland (GNOME):**
+    ```bash
+    gdbus introspect --session --dest org.gnome.Shell \
+      --object-path /org/gnome/Shell/Extensions/Windows
+    ```
+    
+    **On KDE Plasma:**
+    ```bash
+    qdbus org.kde.KWin /KWin org.kde.KWin.queryWindowInfo
+    ```
+    
+    **On X11:**
+    ```bash
+    xprop WM_CLASS
+    # Click on the window to inspect
+    ```
+  </Step>
+  
+  <Step title="Add to excluded_apps">
+    Edit `~/.rewindos/config.toml`:
+    
+    ```toml
+    [privacy]
+    excluded_apps = [
+        "keepassxc",
+        "1password",
+        "telegram-desktop",  # Added
+        "signal-desktop",    # Added
+        "protonmail-bridge"  # Added
+    ]
+    ```
+  </Step>
+  
+  <Step title="Restart the daemon">
+    ```bash
+    systemctl --user restart rewindos-daemon
+    ```
+  </Step>
+</Steps>
+
+### Common Applications to Exclude
+
+<AccordionGroup>
+  <Accordion title="Password Managers">
+    ```toml
+    excluded_apps = [
+        "keepassxc",
+        "1password",
+        "bitwarden",
+        "lastpass",
+        "dashlane",
+        "enpass",
+        "gnome-keyring"
+    ]
+    ```
+  </Accordion>
+  
+  <Accordion title="Messaging & Communication">
+    ```toml
+    excluded_apps = [
+        "signal-desktop",
+        "telegram-desktop",
+        "whatsapp",
+        "element-desktop",
+        "discord",
+        "slack"
+    ]
+    ```
+  </Accordion>
+  
+  <Accordion title="Financial & Banking">
+    ```toml
+    excluded_apps = [
+        "gnucash",
+        "homebank",
+        "chromium",  # If you only use for banking
+        "firefox"    # Be careful - this blocks ALL Firefox windows
+    ]
+    ```
+    
+    <Warning>
+    Blocking entire browsers (Firefox, Chrome) will exclude ALL windows. Use `excluded_title_patterns` for specific sites instead.
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="VPN & Security Tools">
+    ```toml
+    excluded_apps = [
+        "protonvpn",
+        "nordvpn",
+        "mullvad-vpn",
+        "veracrypt",
+        "cryptomator"
+    ]
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Title Pattern Exclusions
+
+<ParamField path="privacy.excluded_title_patterns" type="array<string>" default='["Private Browsing", "Incognito", "Lock Screen"]'>
+  List of substring patterns to match against window titles. If a window title contains any of these patterns (case-insensitive), the capture is skipped.
+  
+  **Use cases:**
+  - Block incognito/private browsing windows
+  - Skip specific websites (e.g., banking sites)
+  - Exclude lock screens and screensavers
+  - Block windows with sensitive keywords in titles
+  
+  ```toml
+  [privacy]
+  excluded_title_patterns = [
+      "Private Browsing",
+      "Incognito",
+      "Lock Screen",
+      "Screen Locker"
+  ]
+  ```
+</ParamField>
+
+### Pattern Matching Behavior
+
+- **Case-insensitive**: "private" matches "Private Browsing" and "PRIVATE MODE"
+- **Substring match**: "bank" matches "My Bank - Login" and "Chase Bank Portal"
+- **Multiple patterns**: If ANY pattern matches, the window is excluded
+
+### Common Title Patterns to Exclude
+
+<CodeGroup>
+```toml Privacy Modes
+[privacy]
+excluded_title_patterns = [
+    "Private Browsing",
+    "Incognito",
+    "InPrivate",
+    "Privacy Mode"
+]
+```
+
+```toml Financial Sites
+[privacy]
+excluded_title_patterns = [
+    "Private Browsing",
+    "Incognito",
+    "bank",
+    "paypal",
+    "stripe",
+    "credit card",
+    "transaction"
+]
+```
+
+```toml Healthcare & Personal
+[privacy]
+excluded_title_patterns = [
+    "Private Browsing",
+    "Incognito",
+    "medical",
+    "health insurance",
+    "patient portal",
+    "therapy"
+]
+```
+
+```toml Lock Screens
+[privacy]
+excluded_title_patterns = [
+    "Lock Screen",
+    "Screen Locker",
+    "gnome-screensaver",
+    "kscreenlocker",
+    "swaylock"
+]
+```
+</CodeGroup>
+
+## Advanced Privacy Patterns
+
+### Regex-Style Patterns
+
+<Warning>
+RewindOS uses **substring matching**, not regex. For complex patterns, add multiple entries:
+</Warning>
+
+```toml
+[privacy]
+excluded_title_patterns = [
+    # Match multiple bank domains
+    "chase.com",
+    "bankofamerica.com",
+    "wellsfargo.com",
+    "citibank.com",
+    
+    # Match email providers
+    "mail.google.com",
+    "outlook.live.com",
+    "protonmail.com"
+]
+```
+
+### Wildcards and Alternatives
+
+Since regex is not supported, use multiple specific patterns:
+
+```toml
+# Instead of regex: "(password|passwd|pwd)"
+excluded_title_patterns = [
+    "password",
+    "passwd",
+    "pwd",
+    "credentials",
+    "secret"
+]
+```
+
+## Testing Exclusions
+
+### Verify Exclusions Are Working
+
+<Steps>
+  <Step title="Enable debug logging">
+    ```bash
+    export RUST_LOG=rewindos_daemon::capture=debug
+    systemctl --user restart rewindos-daemon
+    ```
+  </Step>
+  
+  <Step title="Open an excluded app">
+    Launch an application you've added to `excluded_apps` (e.g., KeePassXC).
+  </Step>
+  
+  <Step title="Check daemon logs">
+    ```bash
+    tail -f ~/.rewindos/logs/daemon.log | grep -i "excluded"
+    ```
+    
+    You should see log entries like:
+    ```
+    [DEBUG] Window excluded: app=keepassxc
+    [DEBUG] Skipping capture (excluded app)
+    ```
+  </Step>
+  
+  <Step title="Verify in database">
+    Check that no new screenshots were created while the excluded app was active:
+    
+    ```bash
+    sqlite3 ~/.rewindos/rewindos.db \
+      "SELECT COUNT(*) FROM screenshots WHERE timestamp > datetime('now', '-5 minutes');"
+    ```
+  </Step>
+</Steps>
+
+### Test Title Pattern Matching
+
+1. Open a browser in incognito/private mode
+2. Check logs: `tail -f ~/.rewindos/logs/daemon.log | grep -i "excluded"`
+3. You should see: `[DEBUG] Window excluded: title contains "Incognito"`
+
+## Privacy Architecture
+
+### When Exclusions Are Applied
+
+From the capture pipeline (`docs/capture-pipeline.md`):
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ CaptureTask (PipeWire)                                      │
+│   1. Fetch frame from PipeWire stream                       │
+│   2. Get active window metadata (app name, title)           │
+│   3. Check privacy exclusions ◄─ PRIVACY FILTER APPLIED    │
+│      - If app in excluded_apps: Drop frame                  │
+│      - If title matches excluded_title_patterns: Drop frame │
+│   4. Forward to HashTask                                    │
+└─────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────┐
+│ HashTask (Deduplication)                                    │
+│   Compute perceptual hash, check for duplicates             │
+└─────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────┐
+│ OcrTask (Tesseract)                                         │
+│   Extract text from screenshot                              │
+└─────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────┐
+│ IndexTask (SQLite)                                          │
+│   Store screenshot + OCR text in database                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+<Info>
+Privacy exclusions happen **before any data is stored**. Excluded frames never touch the disk, database, or OCR pipeline.
+</Info>
+
+### Window Metadata Detection
+
+The daemon uses a fallback chain to detect active window info:
+
+1. **Wayland (wlr-foreign-toplevel)**: Hyprland, Sway, wlroots compositors
+2. **KDE Plasma (D-Bus)**: `org.kde.KWin` interface
+3. **X11 (xcb)**: `_NET_ACTIVE_WINDOW` property
+
+See `window_info/` directory in the daemon source.
+
+## Privacy Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start Restrictive" icon="lock">
+    Begin with a broad exclusion list, then selectively remove apps as needed. It's easier to allow than to clean up captured sensitive data.
+  </Card>
+  
+  <Card title="Use Title Patterns" icon="text">
+    For browser-based workflows, use `excluded_title_patterns` to block specific sites while keeping general browsing captured.
+  </Card>
+  
+  <Card title="Regular Audits" icon="magnifying-glass">
+    Periodically review your configuration and captured screenshots to ensure no sensitive data is leaking.
+  </Card>
+  
+  <Card title="Layered Protection" icon="shield-halved">
+    Combine app exclusions AND title patterns for defense-in-depth (e.g., block password managers by app name AND "password" in titles).
+  </Card>
+</CardGroup>
+
+## Data Deletion
+
+### Delete All Captured Data
+
+To completely remove all RewindOS data:
+
+```bash
+systemctl --user stop rewindos-daemon
+rm -rf ~/.rewindos/
+```
+
+<Warning>
+This is irreversible. All screenshots, OCR data, and configuration will be permanently deleted.
+</Warning>
+
+### Delete Specific Time Ranges
+
+```bash
+# Delete screenshots from a specific date
+rm -rf ~/.rewindos/screenshots/2024-03-15/
+
+# Delete from database
+sqlite3 ~/.rewindos/rewindos.db \
+  "DELETE FROM screenshots WHERE date(timestamp) = '2024-03-15';"
+```
+
+### Exclude Retroactively
+
+If you captured sensitive data before adding an exclusion:
+
+```sql
+-- Find screenshots with sensitive app/title
+SELECT id, timestamp, app_name, window_title 
+FROM screenshots 
+WHERE app_name LIKE '%keepass%' 
+   OR window_title LIKE '%password%';
+
+-- Delete matching screenshots
+DELETE FROM screenshots 
+WHERE app_name LIKE '%keepass%' 
+   OR window_title LIKE '%password%';
+
+-- Clean up orphaned files (manual)
+rm ~/.rewindos/screenshots/YYYY-MM-DD/{timestamp}.webp
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Excluded app is still being captured">
+    1. Check exact app name: `ps aux | grep <app>`
+    2. On Wayland, check wlr-protocols: `gdbus introspect ...`
+    3. Enable debug logs: `RUST_LOG=debug systemctl --user restart rewindos-daemon`
+    4. Verify window_info provider is working: Check logs for `[WINDOW_INFO]` entries
+    5. Try adding multiple variations:
+       ```toml
+       excluded_apps = ["keepassxc", "org.keepassxc.KeePassXC", "keepass"]
+       ```
+  </Accordion>
+  
+  <Accordion title="Title pattern not matching">
+    1. Check exact window title in logs: `grep "window_title" ~/.rewindos/logs/daemon.log`
+    2. Remember: substring match is case-insensitive
+    3. Try broader patterns:
+       ```toml
+       # Instead of "Chase Bank Login"
+       excluded_title_patterns = ["chase", "bank"]
+       ```
+  </Accordion>
+  
+  <Accordion title="Privacy exclusions slowing down capture">
+    Privacy checks are very fast (string comparison), but:
+    - If you have 100+ patterns, consider consolidating
+    - Window metadata fetching (D-Bus/X11) adds ~1-5ms latency
+    - This is acceptable overhead for privacy guarantees
+  </Accordion>
+</AccordionGroup>
+
+## Compliance Considerations
+
+<Warning>
+**Legal Disclaimer**: This documentation does not constitute legal advice. Consult with legal counsel for compliance with data protection regulations in your jurisdiction.
+</Warning>
+
+### GDPR (EU)
+
+- RewindOS is designed for personal use only
+- All data stays on your local machine
+- You are both the data controller and processor
+- No third-party data transmission (except optional localhost Ollama)
+
+### CCPA (California)
+
+- Similar to GDPR, personal use exemption likely applies
+- No sale of personal information occurs
+- Data deletion is user-controlled
+
+### Workplace Monitoring
+
+<Warning>
+**Do not use RewindOS on work devices without explicit written permission.** Many jurisdictions require employer consent for screen recording software, even if it's only local.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Capture Settings" icon="camera" href="/configuration/capture-settings">
+    Configure screen capture intervals and quality
+  </Card>
+  <Card title="AI Integration" icon="brain" href="/configuration/ai-integration">
+    Set up semantic search with Ollama
+  </Card>
+</CardGroup>

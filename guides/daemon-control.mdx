@@ -1,0 +1,391 @@
+---
+title: Daemon Control
+description: Manage the RewindOS capture daemon using systemctl, CLI commands, and D-Bus
+---
+
+The RewindOS capture daemon runs as a systemd user service, continuously capturing screenshots in the background. This guide covers daemon management, monitoring, and troubleshooting.
+
+## Systemd Service Management
+
+The daemon is installed as a systemd user service that starts automatically on login.
+
+### Check Daemon Status
+
+```bash
+systemctl --user status rewindos-daemon
+```
+
+This shows:
+- Service state (active/inactive/failed)
+- Recent log entries
+- Memory/CPU usage
+- Uptime
+
+### Start/Stop/Restart Daemon
+
+<CodeGroup>
+
+```bash Start
+systemctl --user start rewindos-daemon
+```
+
+```bash Stop
+systemctl --user stop rewindos-daemon
+```
+
+```bash Restart
+systemctl --user restart rewindos-daemon
+```
+
+</CodeGroup>
+
+### Enable/Disable Auto-start
+
+<CodeGroup>
+
+```bash Enable
+systemctl --user enable rewindos-daemon
+```
+
+```bash Disable
+systemctl --user disable rewindos-daemon
+```
+
+</CodeGroup>
+
+<Info>
+The daemon automatically starts on login when enabled. It requires D-Bus and PipeWire services to be running.
+</Info>
+
+### Quick Restart After Code Changes
+
+If you've modified the daemon code:
+
+```bash
+make restart-daemon
+```
+
+This rebuilds, reinstalls, and restarts the daemon in one command.
+
+## CLI Commands
+
+The `rewindos-daemon` binary provides direct control without systemd.
+
+### Pause/Resume Capture
+
+Temporarily stop capturing screenshots without stopping the daemon:
+
+<CodeGroup>
+
+```bash Pause
+rewindos-daemon pause
+```
+
+```bash Resume
+rewindos-daemon resume
+```
+
+</CodeGroup>
+
+<Note>
+Pausing is useful when sharing your screen or during sensitive work. Frames already in the pipeline will finish processing.
+</Note>
+
+### Get Daemon Status
+
+View detailed daemon metrics in JSON format:
+
+```bash
+rewindos-daemon status
+```
+
+**Example output:**
+
+```json
+{
+  "is_capturing": true,
+  "frames_captured_today": 2847,
+  "frames_deduplicated_today": 1523,
+  "frames_ocr_pending": 3,
+  "uptime_seconds": 28847,
+  "disk_usage_bytes": 1073741824,
+  "last_capture_timestamp": 1706140800
+}
+```
+
+### Backfill Embeddings
+
+If you enable semantic search after already capturing screenshots:
+
+```bash
+rewindos-daemon backfill
+```
+
+Options:
+- `--batch-size N` - Process N screenshots per batch (default: 50)
+
+<Tip>
+Backfilling runs automatically in the background when Ollama is detected. Manual backfill is only needed if you want to force immediate processing.
+</Tip>
+
+### Recompress Screenshots
+
+Reduce disk usage by recompressing existing screenshots:
+
+```bash
+rewindos-daemon recompress --quality 80 --max-width 1920 --thumb-width 320
+```
+
+Options:
+- `--quality` - WebP quality 0-100 (default: 80)
+- `--max-width` - Maximum image width in pixels (default: 1920)
+- `--thumb-width` - Thumbnail width (default: 320)
+- `--dry-run` - Preview space savings without modifying files
+
+<Warning>
+Recompression is destructive. Run with `--dry-run` first to see estimated space savings.
+</Warning>
+
+## D-Bus Interface
+
+The daemon exposes a D-Bus service for IPC communication.
+
+**Service details:**
+- Bus: Session (user)
+- Bus name: `com.rewindos.Daemon`
+- Object path: `/com/rewindos/Daemon`
+- Interface: `com.rewindos.Daemon`
+
+### Using busctl
+
+Interact with the daemon directly via D-Bus:
+
+<Steps>
+
+<Step title="Check if daemon is running">
+
+```bash
+busctl --user list | grep rewindos
+```
+
+You should see `com.rewindos.Daemon` in the output.
+
+</Step>
+
+<Step title="Call methods">
+
+<CodeGroup>
+
+```bash Get Status
+busctl --user call com.rewindos.Daemon /com/rewindos/Daemon com.rewindos.Daemon GetStatus
+```
+
+```bash Pause
+busctl --user call com.rewindos.Daemon /com/rewindos/Daemon com.rewindos.Daemon Pause
+```
+
+```bash Resume
+busctl --user call com.rewindos.Daemon /com/rewindos/Daemon com.rewindos.Daemon Resume
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Monitor signals">
+
+Watch for daemon events in real-time:
+
+```bash
+busctl --user monitor com.rewindos.Daemon
+```
+
+This shows `CaptureStateChanged` signals when capture is paused/resumed.
+
+</Step>
+
+</Steps>
+
+### Search via D-Bus
+
+Perform full-text search directly:
+
+```bash
+busctl --user call com.rewindos.Daemon /com/rewindos/Daemon com.rewindos.Daemon Search ss "postgresql" "{}"
+```
+
+Parameters:
+- First `s` (string): Search query
+- Second `s` (string): JSON filters object (empty `{}` for defaults)
+
+## Viewing Logs
+
+The daemon logs to systemd journal.
+
+### Follow Live Logs
+
+```bash
+make logs
+```
+
+Or directly:
+
+```bash
+journalctl --user -u rewindos-daemon -f
+```
+
+### View Recent Logs
+
+```bash
+journalctl --user -u rewindos-daemon -n 100
+```
+
+### Filter by Time
+
+<CodeGroup>
+
+```bash Today
+journalctl --user -u rewindos-daemon --since today
+```
+
+```bash Last Hour
+journalctl --user -u rewindos-daemon --since "1 hour ago"
+```
+
+```bash Specific Date
+journalctl --user -u rewindos-daemon --since "2026-03-01" --until "2026-03-02"
+```
+
+</CodeGroup>
+
+### Change Log Level
+
+Edit the systemd service file:
+
+```bash
+systemctl --user edit rewindos-daemon
+```
+
+Add:
+
+```ini
+[Service]
+Environment=RUST_LOG=debug
+```
+
+Then restart:
+
+```bash
+systemctl --user restart rewindos-daemon
+```
+
+Available levels: `error`, `warn`, `info`, `debug`, `trace`
+
+<Info>
+Default log level is `info`. Use `debug` or `trace` for troubleshooting, but expect much more verbose output.
+</Info>
+
+## Service Configuration
+
+The daemon service file is located at:
+
+```
+~/.config/systemd/user/rewindos-daemon.service
+```
+
+**Default configuration:**
+
+```ini
+[Unit]
+Description=RewindOS Capture Daemon
+Documentation=https://github.com/jay/rewindos
+After=graphical-session.target pipewire.service dbus.service
+Requires=dbus.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/rewindos-daemon
+Restart=on-failure
+RestartSec=5
+Environment=RUST_LOG=info
+Environment=XDG_RUNTIME_DIR=%t
+
+[Install]
+WantedBy=graphical-session.target
+```
+
+### Key directives:
+
+- `After=` - Start after PipeWire and D-Bus are ready
+- `Requires=` - Fail if D-Bus isn't available
+- `Restart=on-failure` - Auto-restart on crashes
+- `RestartSec=5` - Wait 5 seconds before restarting
+
+<Tip>
+After editing the service file, run `systemctl --user daemon-reload` to apply changes.
+</Tip>
+
+## Advanced Usage
+
+### Run Daemon in Foreground (Development)
+
+Skip systemd and run directly in your terminal:
+
+```bash
+cargo run -p rewindos-daemon
+```
+
+Logs appear in stdout. Useful for debugging.
+
+### Custom Config Path
+
+By default, config is loaded from `~/.rewindos/config.toml`. The daemon creates it with defaults on first run.
+
+To use a custom config, modify the ExecStart path or set environment variables in your code.
+
+### Check Dependencies
+
+<Steps>
+
+<Step title="Verify Tesseract is installed">
+
+```bash
+tesseract --version
+```
+
+Required for OCR. Install with:
+
+```bash
+sudo apt install tesseract-ocr tesseract-ocr-eng
+```
+
+</Step>
+
+<Step title="Verify PipeWire is running">
+
+```bash
+systemctl --user status pipewire
+```
+
+Required for screen capture on Wayland.
+
+</Step>
+
+<Step title="Verify D-Bus session bus">
+
+```bash
+echo $DBUS_SESSION_BUS_ADDRESS
+```
+
+Should output a valid socket path.
+
+</Step>
+
+</Steps>
+
+## See Also
+
+- [Troubleshooting](/guides/troubleshooting) - Common daemon issues
+- [Configuration](/configuration/overview) - Config file reference
+- [D-Bus API Reference](/api/dbus-interface) - Full API documentation

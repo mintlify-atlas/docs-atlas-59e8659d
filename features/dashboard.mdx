@@ -1,0 +1,394 @@
+---
+title: Dashboard
+description: Analytics overview with activity charts, app usage stats, and productivity insights
+---
+
+The Dashboard provides a high-level view of your screen time and productivity patterns with interactive charts and statistics.
+
+## Overview Stats
+
+At the top of the dashboard, you'll see key metrics for today:
+
+<CardGroup cols={2}>
+  <Card title="Screen Time" icon="clock">
+    Total active time (excludes idle periods).
+    
+    Shows trend vs yesterday (↑ +15% or ↓ -10%).
+  </Card>
+  <Card title="Captures" icon="camera">
+    Number of screenshots taken today.
+    
+    Indicates activity level and capture frequency.
+  </Card>
+  <Card title="Active Apps" icon="window">
+    How many different applications you used.
+    
+    Shows your top app name.
+  </Card>
+  <Card title="Top App" icon="star">
+    Your most-used application by time.
+    
+    Updates throughout the day.
+  </Card>
+</CardGroup>
+
+### Screen Time Calculation
+
+Screen time is based on **active blocks**, not raw capture count:
+
+<Steps>
+  <Step title="Capture timestamps">
+    Each screenshot has a Unix timestamp (seconds precision).
+  </Step>
+  
+  <Step title="Active block detection">
+    Consecutive screenshots within 5 minutes = active block.
+  </Step>
+  
+  <Step title="Duration calculation">
+    Sum all active block durations, excluding:
+    - Idle gaps (>5 min between captures)
+    - Excluded apps (password managers, etc.)
+    - Paused capture periods
+  </Step>
+  
+  <Step title="Trend comparison">
+    Compare today's total to yesterday's to show percentage change.
+  </Step>
+</Steps>
+
+<Info>
+This gives a more accurate measure than counting screenshots, since capture interval can vary.
+</Info>
+
+## App Timeline
+
+A horizontal color-coded timeline shows your app usage throughout the day:
+
+- Each app gets a unique, consistent color
+- Hover over segments to see app name and time range
+- Timeline updates every 30 seconds
+- Gaps indicate idle time or paused capture
+
+### How It Works
+
+The timeline is built from screenshot metadata:
+
+1. Group consecutive screenshots by app name
+2. Calculate start/end timestamps for each "span"
+3. Assign colors using a hash function (same app = same color)
+4. Render as proportional width segments
+
+<Tip>
+Click on a timeline segment to jump to that time in History view.
+</Tip>
+
+## Activity Charts
+
+Dashboard includes multiple chart types for different insights:
+
+### Hourly Activity Chart
+
+<Card>
+Bar chart showing captures per hour (0-23).
+
+**Use it to:**
+- Identify your most productive hours
+- See when you start/stop work
+- Spot unusual activity patterns
+- Plan your schedule around peak performance times
+
+**Details:**
+- X-axis: Hours (12 AM - 11 PM)
+- Y-axis: Screenshot count
+- Hover for exact count per hour
+</Card>
+
+### App Usage Donut Chart
+
+<Card>
+Proportional breakdown of time per application.
+
+**Use it to:**
+- See which apps dominate your day
+- Identify unexpected time sinks
+- Validate that you're spending time where you intend
+
+**Details:**
+- Each slice represents an app
+- Size = proportion of total screen time
+- Hover for percentage and time
+- Top 10 apps shown, rest grouped as "Other"
+</Card>
+
+### Categories Breakdown
+
+<Card>
+Groups apps into activity categories (Development, Communication, etc.).
+
+**Use it to:**
+- Get a higher-level view than per-app stats
+- Track time across tool categories
+- Identify distraction patterns (Social, Entertainment)
+
+**Categories:**
+- Development (VS Code, Terminal, Git)
+- Communication (Slack, Email, Zoom)
+- Browsers (Firefox, Chrome)
+- Design (Figma, GIMP)
+- Entertainment (YouTube, Spotify)
+- Social (Twitter, Reddit, Discord)
+- Productivity (Notion, Obsidian)
+- Other (uncategorized)
+
+Customize in Settings → Focus → Category Rules.
+</Card>
+
+<Info>
+Category breakdown requires category rules to be configured. By default, it uses built-in heuristics.
+</Info>
+
+## Top Tasks List
+
+Shows your most-used apps ranked by time:
+
+- **App name** with color indicator
+- **Estimated time** in hours/minutes
+- **Percentage** of total screen time
+- **Progress bar** for visual proportion
+
+Top 5 apps are shown by default.
+
+### Time Estimation
+
+Time per app is estimated using:
+
+```
+app_time = sum(screenshot_span_durations)
+```
+
+Where a "span" is consecutive screenshots from the same app.
+
+<Note>
+Estimation assumes you were actively using the app for the duration between screenshots. Idle time is excluded.
+</Note>
+
+## Captures Carousel
+
+A visual preview of today's screenshots:
+
+- **15 evenly-sampled captures** across the day
+- Click any thumbnail to view full detail
+- Useful for quick visual browsing
+- Only screenshots with thumbnails are shown
+
+### Sampling Algorithm
+
+1. Filter screenshots with valid thumbnail paths
+2. Sort by timestamp (chronological)
+3. Select 15 evenly-spaced samples using step calculation
+4. If less than 15 total, show all available
+
+<Tip>
+The carousel gives you a "highlight reel" of your day without manually browsing History.
+</Tip>
+
+## Time Range
+
+By default, Dashboard shows **today's data** (midnight to now).
+
+Time range:
+- **Start**: Today at 00:00:00
+- **End**: Current timestamp
+- **Updates**: Every 30 seconds via React Query
+
+<Info>
+Unlike History, Dashboard doesn't support custom time ranges. It's designed for daily overview. Use History for historical data.
+</Info>
+
+## Data Refresh
+
+All dashboard data auto-refreshes:
+
+| Metric | Refresh Interval |
+|--------|------------------|
+| Overview stats | 30 seconds |
+| Activity charts | 30 seconds |
+| App timeline | 30 seconds |
+| Screenshots | 30 seconds |
+| Category breakdown | 30 seconds |
+
+Manual refresh: Close and reopen the view, or wait for next auto-refresh.
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Morning standup prep">
+    Open Dashboard to quickly answer:
+    - What did I work on yesterday?
+    - How much time in each tool?
+    - When was I most productive?
+    
+    Perfect for daily standup summaries.
+  </Accordion>
+  
+  <Accordion title="End-of-day review">
+    Check Dashboard before logging off:
+    - Did I hit my screen time goals?
+    - Was time well-distributed?
+    - Any unexpected distractions?
+    
+    Adjust tomorrow's plan accordingly.
+  </Accordion>
+  
+  <Accordion title="Productivity analysis">
+    Review hourly activity chart:
+    - Identify peak productivity hours
+    - Schedule deep work during those times
+    - Avoid meetings during peak focus periods
+  </Accordion>
+  
+  <Accordion title="Time audit">
+    Use app usage donut:
+    - Find apps consuming more time than expected
+    - Validate tool choices (e.g., too much Slack?)
+    - Add time sinks to Focus mode distraction list
+  </Accordion>
+</AccordionGroup>
+
+## Integration with Other Views
+
+<CardGroup cols={3}>
+  <Card title="History" icon="clock-rotate-left">
+    Click timeline segments or captures to jump to History view for that time range.
+  </Card>
+  <Card title="Focus" icon="crosshairs">
+    Category breakdown and daily goals sync with Focus mode.
+  </Card>
+  <Card title="Settings" icon="gear">
+    Customize category rules, excluded apps, and capture settings.
+  </Card>
+</CardGroup>
+
+## Performance
+
+Dashboard is optimized for fast loading:
+
+- Queries up to 2000 screenshots (today's typical max)
+- Charts use lazy rendering (only visible elements)
+- Thumbnails are cached by React Query
+- Activity data is pre-aggregated server-side
+
+<Note>
+If Dashboard is slow, check how many screenshots you have for today. 1000+ can cause lag. Reduce capture interval in Settings if needed.
+</Note>
+
+## Troubleshooting
+
+<Warning>
+**No data showing?**
+
+1. Verify daemon is running: `systemctl --user status rewindos-daemon`
+2. Check capture is enabled: Settings → Capture → Enabled
+3. Look for errors: `journalctl --user -u rewindos-daemon`
+4. Confirm screenshots exist: `ls ~/.rewindos/screenshots/$(date +%Y-%m-%d)/`
+</Warning>
+
+<Warning>
+**Screen time is 0 but I have screenshots**
+
+- Active blocks require at least 2 screenshots within 5 minutes
+- If capture interval is >5 minutes, active blocks won't form
+- Reduce interval to 3-5 seconds in Settings → Capture
+</Warning>
+
+<Warning>
+**App colors are confusing**
+
+App colors are auto-generated from a hash function. They're consistent within a session but may change across restarts. This is intentional to avoid visual clutter.
+</Warning>
+
+<Tip>
+If you want persistent app colors, edit `src/lib/app-categories.ts` to add custom color mappings.
+</Tip>
+
+## Chart Interactions
+
+### Hourly Activity
+
+- **Hover** — See exact capture count for that hour
+- **Click** — Jump to History view filtered to that hour (coming soon)
+
+### App Donut
+
+- **Hover** — See app name, percentage, and time
+- **Click** — Jump to History filtered by that app (coming soon)
+
+### Categories
+
+- **Hover** — See category name and time
+- **Click** — Expand to see apps in that category (coming soon)
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `r` | Refresh all data |
+| `h` | Jump to History view |
+| `f` | Jump to Focus view |
+| `Escape` | Close detail view |
+
+## Customization
+
+### Category Rules
+
+Define custom categories in Settings → Focus:
+
+```toml
+[focus.category_rules]
+Work = ["vscode", "terminal", "notion"]
+Meetings = ["zoom", "teams", "slack"]
+Learning = ["udemy", "youtube", "firefox"]
+```
+
+Rules are matched by app name (case-insensitive substring).
+
+### Excluded Apps
+
+Apps excluded in Settings → Privacy won't appear in Dashboard stats:
+
+```toml
+[privacy]
+excluded_apps = ["keepassxc", "1password", "bitwarden"]
+```
+
+This prevents password managers from inflating screen time.
+
+<Info>
+Excluded apps are still captured (for security/recall), just not counted in analytics.
+</Info>
+
+## Technical Details
+
+Dashboard uses these API endpoints:
+
+- `getActivity(start, end)` — App usage, hourly activity, total screenshots
+- `browseScreenshots(start, end, app, limit)` — Today's screenshots
+- `getTaskBreakdown(start, end, limit)` — Per-app time estimates
+- `getActiveBlocks(start, end)` — Active time blocks for screen time calculation
+
+Data flow:
+
+1. Fetch today's screenshots on mount
+2. Compute app spans client-side from screenshot metadata
+3. Fetch aggregated activity stats from daemon
+4. Merge client-computed and server-computed data
+5. Render charts with recharts library
+
+See `src/features/dashboard/DashboardView.tsx` for implementation.
+
+## Related Features
+
+- **[History](/features/history)** — Deep dive into specific time ranges
+- **[Focus Mode](/features/focus-mode)** — Set goals and track productivity
+- **[Search](/features/search)** — Find specific content from today's captures

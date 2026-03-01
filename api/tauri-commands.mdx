@@ -1,0 +1,985 @@
+---
+title: 'Tauri Commands'
+description: 'Frontend-accessible commands exposed by the Tauri application'
+---
+
+All Tauri commands are asynchronous and accessible from the React frontend via `@tauri-apps/api/core`.
+
+## Search & Browse
+
+### search
+
+Search screenshots by OCR text using the daemon's Search D-Bus method.
+
+<ParamField path="query" type="string" required>
+  Search query (supports FTS5 syntax: AND, OR, NOT, phrases)
+</ParamField>
+
+<ParamField path="filters" type="UiSearchFilters" required>
+  Search filters object
+  <Expandable title="UiSearchFilters">
+    <ParamField path="start_time" type="i64 | null">
+      Filter after timestamp
+    </ParamField>
+    <ParamField path="end_time" type="i64 | null">
+      Filter before timestamp
+    </ParamField>
+    <ParamField path="app_name" type="string | null">
+      Filter by app name
+    </ParamField>
+    <ParamField path="limit" type="i64" default="50">
+      Max results
+    </ParamField>
+    <ParamField path="offset" type="i64" default="0">
+      Pagination offset
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="response" type="SearchResponse">
+  Search results with deduplication metadata
+</ResponseField>
+
+**Source:** `lib.rs:70-99`
+
+<CodeGroup>
+```typescript Frontend Usage
+import { invoke } from '@tauri-apps/api/core';
+
+const results = await invoke('search', {
+  query: 'PostgreSQL connection pool',
+  filters: {
+    start_time: null,
+    end_time: null,
+    app_name: null,
+    limit: 50,
+    offset: 0,
+  },
+});
+```
+</CodeGroup>
+
+---
+
+### browse_screenshots
+
+Browse screenshots chronologically without search query.
+
+<ParamField path="start_time" type="i64 | null">
+  Filter after timestamp
+</ParamField>
+
+<ParamField path="end_time" type="i64 | null">
+  Filter before timestamp
+</ParamField>
+
+<ParamField path="app_name" type="string | null">
+  Filter by app name
+</ParamField>
+
+<ParamField path="limit" type="i64 | null" default="200">
+  Max results
+</ParamField>
+
+<ParamField path="offset" type="i64 | null" default="0">
+  Pagination offset
+</ParamField>
+
+<ResponseField name="entries" type="TimelineEntry[]">
+  Array of timeline entries
+</ResponseField>
+
+**Source:** `lib.rs:200-231`
+
+---
+
+### get_screenshot
+
+Get detailed information about a single screenshot, including OCR text and bounding boxes.
+
+<ParamField path="id" type="i64" required>
+  Screenshot ID
+</ParamField>
+
+<ResponseField name="detail" type="ScreenshotDetail">
+  Full screenshot details
+  <Expandable title="ScreenshotDetail Fields">
+    <ResponseField name="id" type="i64" required />
+    <ResponseField name="timestamp" type="i64" required />
+    <ResponseField name="app_name" type="string | null" />
+    <ResponseField name="window_title" type="string | null" />
+    <ResponseField name="window_class" type="string | null" />
+    <ResponseField name="file_path" type="string" required />
+    <ResponseField name="width" type="i32" required />
+    <ResponseField name="height" type="i32" required />
+    <ResponseField name="ocr_text" type="string | null" />
+    <ResponseField name="bounding_boxes" type="BoundingBox[]" required />
+  </Expandable>
+</ResponseField>
+
+**Source:** `lib.rs:160-188`
+
+---
+
+## Daemon Control
+
+### get_daemon_status
+
+Get current daemon status via D-Bus GetStatus method.
+
+<ResponseField name="status" type="DaemonStatusResponse">
+  Daemon status object
+  <Expandable title="DaemonStatusResponse Fields">
+    <ResponseField name="is_capturing" type="boolean" required />
+    <ResponseField name="frames_captured_today" type="u64" required />
+    <ResponseField name="frames_deduplicated_today" type="u64" required />
+    <ResponseField name="frames_ocr_pending" type="u64" required />
+    <ResponseField name="uptime_seconds" type="u64" required />
+    <ResponseField name="disk_usage_bytes" type="u64" required />
+    <ResponseField name="last_capture_timestamp" type="i64 | null" />
+  </Expandable>
+</ResponseField>
+
+**Source:** `lib.rs:101-123`
+
+---
+
+### pause_capture
+
+Pause screen capture via D-Bus Pause method.
+
+<ResponseField name="result" type="void">
+  No return value
+</ResponseField>
+
+**Source:** `lib.rs:125-140`
+
+---
+
+### resume_capture
+
+Resume screen capture via D-Bus Resume method.
+
+<ResponseField name="result" type="void">
+  No return value
+</ResponseField>
+
+**Source:** `lib.rs:142-157`
+
+---
+
+### delete_screenshots_in_range
+
+Delete all screenshots in a time range via D-Bus DeleteRange method.
+
+<ParamField path="start_time" type="i64" required>
+  Start of range (inclusive)
+</ParamField>
+
+<ParamField path="end_time" type="i64" required>
+  End of range (inclusive)
+</ParamField>
+
+<ResponseField name="deleted_count" type="u64">
+  Number of screenshots deleted
+</ResponseField>
+
+**Source:** `lib.rs:1466-1490`
+
+---
+
+## Activity & Analytics
+
+### get_app_names
+
+Get list of all distinct app names in the database.
+
+<ResponseField name="app_names" type="string[]">
+  Array of app names
+</ResponseField>
+
+**Source:** `lib.rs:233-237`
+
+---
+
+### get_activity
+
+Get hourly and daily activity stats.
+
+<ParamField path="since_timestamp" type="i64" required>
+  Start of time range
+</ParamField>
+
+<ParamField path="until_timestamp" type="i64 | null">
+  End of time range (defaults to now)
+</ParamField>
+
+<ResponseField name="activity" type="ActivityResponse">
+  Activity breakdown by hour and day
+</ResponseField>
+
+**Source:** `lib.rs:239-248`
+
+---
+
+### get_task_breakdown
+
+Get app usage stats for a time range.
+
+<ParamField path="start_time" type="i64" required>
+  Start timestamp
+</ParamField>
+
+<ParamField path="end_time" type="i64" required>
+  End timestamp
+</ParamField>
+
+<ParamField path="limit" type="i64 | null" default="100">
+  Max number of apps to return
+</ParamField>
+
+<ResponseField name="stats" type="TaskUsageStat[]">
+  Array of app usage statistics
+</ResponseField>
+
+**Source:** `lib.rs:250-266`
+
+---
+
+### get_active_blocks
+
+Get continuous activity blocks (sessions) for timeline visualization.
+
+<ParamField path="start_time" type="i64" required>
+  Start timestamp
+</ParamField>
+
+<ParamField path="end_time" type="i64" required>
+  End timestamp
+</ParamField>
+
+<ResponseField name="blocks" type="ActiveBlock[]">
+  Array of active time blocks
+</ResponseField>
+
+**Source:** `lib.rs:268-283`
+
+---
+
+### get_daily_summary
+
+Generate or retrieve cached AI-powered daily summary using Ollama.
+
+<ParamField path="start_time" type="i64" required>
+  Day start timestamp
+</ParamField>
+
+<ParamField path="end_time" type="i64" required>
+  Day end timestamp
+</ParamField>
+
+<ParamField path="force_regenerate" type="boolean | null" default="false">
+  Bypass cache and regenerate summary
+</ParamField>
+
+<ResponseField name="summary" type="DailySummary">
+  Daily summary with AI-generated insights
+  <Expandable title="DailySummary Fields">
+    <ResponseField name="summary" type="string | null">
+      AI-generated summary text (null if Ollama unavailable)
+    </ResponseField>
+    <ResponseField name="app_breakdown" type="AppTimeEntry[]" required />
+    <ResponseField name="total_sessions" type="usize" required />
+    <ResponseField name="time_range" type="string" required />
+    <ResponseField name="cached" type="boolean" required />
+    <ResponseField name="generated_at" type="string | null" />
+    <ResponseField name="screenshot_count" type="i64" required />
+  </Expandable>
+</ResponseField>
+
+**Source:** `lib.rs:303-620`
+
+---
+
+## Ask (AI Chat)
+
+### ask_new_session
+
+Create a new chat session and return session ID.
+
+<ResponseField name="session_id" type="string">
+  UUID v4 session identifier
+</ResponseField>
+
+**Source:** `lib.rs:650-658`
+
+---
+
+### ask_health
+
+Check if Ollama chat service is available.
+
+<ResponseField name="healthy" type="boolean">
+  True if Ollama is reachable and has the configured model
+</ResponseField>
+
+**Source:** `lib.rs:660-671`
+
+---
+
+### ask
+
+Send a message to the AI chat assistant. Streams response via `ask-token`, `ask-done`, and `ask-error` events.
+
+<ParamField path="session_id" type="string" required>
+  Session ID from ask_new_session
+</ParamField>
+
+<ParamField path="message" type="string" required>
+  User message
+</ParamField>
+
+<ResponseField name="response" type="AskResponse">
+  Immediate response with session ID and screenshot references
+  <Expandable title="AskResponse Fields">
+    <ResponseField name="session_id" type="string" required />
+    <ResponseField name="references" type="ScreenshotReference[]" required>
+      Screenshots used as context
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Events emitted:**
+- `ask-token` — Streaming response tokens (`AskTokenPayload`)
+- `ask-done` — Final response (`AskDonePayload`)
+- `ask-error` — Error during generation (`AskErrorPayload`)
+
+**Source:** `lib.rs:685-1008`
+
+<CodeGroup>
+```typescript Frontend Usage
+import { invoke, listen } from '@tauri-apps/api/core';
+
+const sessionId = await invoke('ask_new_session');
+
+const unlisten = await listen('ask-token', (event) => {
+  console.log('Token:', event.payload.token);
+});
+
+const { references } = await invoke('ask', {
+  sessionId,
+  message: 'What did I work on this morning?',
+});
+```
+</CodeGroup>
+
+---
+
+### ask_cancel
+
+Cancel an in-progress chat stream.
+
+<ParamField path="session_id" type="string" required>
+  Session ID to cancel
+</ParamField>
+
+<ResponseField name="result" type="void">
+  No return value
+</ResponseField>
+
+**Source:** `lib.rs:673-683`
+
+---
+
+## Bookmarks
+
+### toggle_bookmark
+
+Toggle bookmark status for a screenshot.
+
+<ParamField path="screenshot_id" type="i64" required>
+  Screenshot ID
+</ParamField>
+
+<ParamField path="note" type="string | null">
+  Optional bookmark note
+</ParamField>
+
+<ResponseField name="is_bookmarked" type="boolean">
+  New bookmark state (true if now bookmarked)
+</ResponseField>
+
+**Source:** `lib.rs:1012-1021`
+
+---
+
+### is_bookmarked
+
+Check if a screenshot is bookmarked.
+
+<ParamField path="screenshot_id" type="i64" required>
+  Screenshot ID
+</ParamField>
+
+<ResponseField name="bookmarked" type="boolean">
+  True if bookmarked
+</ResponseField>
+
+**Source:** `lib.rs:1023-1028`
+
+---
+
+### get_bookmarked_ids
+
+Get bookmarked IDs from a list of screenshot IDs.
+
+<ParamField path="screenshot_ids" type="i64[]" required>
+  Array of screenshot IDs to check
+</ParamField>
+
+<ResponseField name="bookmarked_ids" type="i64[]">
+  Subset of input IDs that are bookmarked
+</ResponseField>
+
+**Source:** `lib.rs:1030-1038`
+
+---
+
+### list_bookmarks
+
+List all bookmarked screenshots.
+
+<ParamField path="limit" type="i64 | null" default="100">
+  Max results
+</ParamField>
+
+<ParamField path="offset" type="i64 | null" default="0">
+  Pagination offset
+</ParamField>
+
+<ResponseField name="bookmarks" type="BookmarkEntry[]">
+  Array of bookmark entries with screenshot data
+</ResponseField>
+
+**Source:** `lib.rs:1046-1071`
+
+---
+
+## Collections
+
+### create_collection
+
+Create a new screenshot collection.
+
+<ParamField path="collection" type="NewCollection" required>
+  Collection metadata
+  <Expandable title="NewCollection Fields">
+    <ParamField path="name" type="string" required />
+    <ParamField path="description" type="string | null" />
+  </Expandable>
+</ParamField>
+
+<ResponseField name="collection_id" type="i64">
+  ID of created collection
+</ResponseField>
+
+**Source:** `lib.rs:1075-1083`
+
+---
+
+### update_collection
+
+Update collection metadata.
+
+<ParamField path="id" type="i64" required>
+  Collection ID
+</ParamField>
+
+<ParamField path="update" type="UpdateCollection" required>
+  Fields to update
+</ParamField>
+
+<ResponseField name="result" type="void">
+  No return value
+</ResponseField>
+
+**Source:** `lib.rs:1085-1094`
+
+---
+
+### delete_collection
+
+Delete a collection (screenshots remain in database).
+
+<ParamField path="id" type="i64" required>
+  Collection ID
+</ParamField>
+
+<ResponseField name="result" type="void">
+  No return value
+</ResponseField>
+
+**Source:** `lib.rs:1096-1101`
+
+---
+
+### list_collections
+
+List all collections.
+
+<ResponseField name="collections" type="Collection[]">
+  Array of collections
+</ResponseField>
+
+**Source:** `lib.rs:1103-1108`
+
+---
+
+### get_collection_screenshots
+
+Get screenshots in a collection.
+
+<ParamField path="id" type="i64" required>
+  Collection ID
+</ParamField>
+
+<ParamField path="limit" type="i64 | null" default="200">
+  Max results
+</ParamField>
+
+<ParamField path="offset" type="i64 | null" default="0">
+  Pagination offset
+</ParamField>
+
+<ResponseField name="screenshots" type="TimelineEntry[]">
+  Array of screenshots in collection
+</ResponseField>
+
+**Source:** `lib.rs:1110-1133`
+
+---
+
+### add_to_collection
+
+Add a screenshot to a collection.
+
+<ParamField path="collection_id" type="i64" required>
+  Collection ID
+</ParamField>
+
+<ParamField path="screenshot_id" type="i64" required>
+  Screenshot ID
+</ParamField>
+
+<ResponseField name="result" type="void">
+  No return value
+</ResponseField>
+
+**Source:** `lib.rs:1135-1144`
+
+---
+
+### remove_from_collection
+
+Remove a screenshot from a collection.
+
+<ParamField path="collection_id" type="i64" required>
+  Collection ID
+</ParamField>
+
+<ParamField path="screenshot_id" type="i64" required>
+  Screenshot ID
+</ParamField>
+
+<ResponseField name="result" type="void">
+  No return value
+</ResponseField>
+
+**Source:** `lib.rs:1146-1155`
+
+---
+
+## Journal
+
+### get_journal_entry
+
+Get journal entry for a specific date.
+
+<ParamField path="date" type="string" required>
+  Date in YYYY-MM-DD format
+</ParamField>
+
+<ResponseField name="entry" type="JournalEntry | null">
+  Journal entry or null if not found
+</ResponseField>
+
+**Source:** `lib.rs:1159-1167`
+
+---
+
+### upsert_journal_entry
+
+Create or update a journal entry.
+
+<ParamField path="entry" type="UpsertJournalEntry" required>
+  Journal entry data
+</ParamField>
+
+<ResponseField name="entry_id" type="i64">
+  ID of created/updated entry
+</ResponseField>
+
+**Source:** `lib.rs:1169-1177`
+
+---
+
+### delete_journal_entry
+
+Delete a journal entry.
+
+<ParamField path="date" type="string" required>
+  Date in YYYY-MM-DD format
+</ParamField>
+
+<ResponseField name="deleted" type="boolean">
+  True if entry was deleted
+</ResponseField>
+
+**Source:** `lib.rs:1179-1184`
+
+---
+
+### get_journal_dates
+
+Get list of dates with journal entries in a range.
+
+<ParamField path="start_date" type="string" required>
+  Start date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="end_date" type="string" required>
+  End date (YYYY-MM-DD)
+</ParamField>
+
+<ResponseField name="dates" type="JournalDateInfo[]">
+  Array of dates with entry metadata
+</ResponseField>
+
+**Source:** `lib.rs:1186-1195`
+
+---
+
+### get_journal_streak
+
+Get current journaling streak.
+
+<ResponseField name="streak" type="JournalStreakInfo">
+  Streak statistics
+</ResponseField>
+
+**Source:** `lib.rs:1197-1202`
+
+---
+
+### get_open_todos
+
+Get uncompleted todos from journal entries in date range.
+
+<ParamField path="start_date" type="string" required>
+  Start date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="end_date" type="string" required>
+  End date (YYYY-MM-DD)
+</ParamField>
+
+<ResponseField name="todos" type="OpenTodo[]">
+  Array of open todos
+</ResponseField>
+
+**Source:** `lib.rs:1204-1213`
+
+---
+
+### add_journal_screenshot
+
+Attach a screenshot to a journal entry.
+
+<ParamField path="journal_entry_id" type="i64" required>
+  Journal entry ID
+</ParamField>
+
+<ParamField path="screenshot_id" type="i64" required>
+  Screenshot ID
+</ParamField>
+
+<ParamField path="caption" type="string | null">
+  Optional caption
+</ParamField>
+
+<ResponseField name="id" type="i64">
+  ID of journal_screenshots record
+</ResponseField>
+
+**Source:** `lib.rs:1215-1225`
+
+---
+
+### remove_journal_screenshot
+
+Remove a screenshot from a journal entry.
+
+<ParamField path="journal_entry_id" type="i64" required>
+  Journal entry ID
+</ParamField>
+
+<ParamField path="screenshot_id" type="i64" required>
+  Screenshot ID
+</ParamField>
+
+<ResponseField name="result" type="void">
+  No return value
+</ResponseField>
+
+**Source:** `lib.rs:1227-1236`
+
+---
+
+### get_journal_screenshots
+
+Get all screenshots attached to a journal entry.
+
+<ParamField path="journal_entry_id" type="i64" required>
+  Journal entry ID
+</ParamField>
+
+<ResponseField name="screenshots" type="JournalScreenshot[]">
+  Array of attached screenshots
+</ResponseField>
+
+**Source:** `lib.rs:1238-1246`
+
+---
+
+### set_journal_tags
+
+Set tags for a journal entry (replaces existing).
+
+<ParamField path="entry_id" type="i64" required>
+  Journal entry ID
+</ParamField>
+
+<ParamField path="tags" type="string[]" required>
+  Array of tag names
+</ParamField>
+
+<ResponseField name="result" type="void">
+  No return value
+</ResponseField>
+
+**Source:** `lib.rs:1250-1259`
+
+---
+
+### get_journal_tags
+
+Get tags for a journal entry.
+
+<ParamField path="entry_id" type="i64" required>
+  Journal entry ID
+</ParamField>
+
+<ResponseField name="tags" type="JournalTag[]">
+  Array of tags
+</ResponseField>
+
+**Source:** `lib.rs:1261-1269`
+
+---
+
+### list_all_journal_tags
+
+Get all unique tags across all journal entries.
+
+<ResponseField name="tags" type="JournalTag[]">
+  Array of all tags
+</ResponseField>
+
+**Source:** `lib.rs:1271-1275`
+
+---
+
+### search_journal
+
+Full-text search across journal entries.
+
+<ParamField path="query" type="string" required>
+  FTS5 search query
+</ParamField>
+
+<ParamField path="limit" type="i64 | null" default="20">
+  Max results
+</ParamField>
+
+<ParamField path="offset" type="i64 | null" default="0">
+  Pagination offset
+</ParamField>
+
+<ResponseField name="results" type="JournalSearchResponse">
+  Search results with matched entries
+</ResponseField>
+
+**Source:** `lib.rs:1277-1287`
+
+---
+
+### list_journal_templates
+
+List all saved journal templates.
+
+<ResponseField name="templates" type="JournalTemplate[]">
+  Array of templates
+</ResponseField>
+
+**Source:** `lib.rs:1289-1294`
+
+---
+
+### create_journal_template
+
+Create a new journal template.
+
+<ParamField path="name" type="string" required>
+  Template name
+</ParamField>
+
+<ParamField path="description" type="string | null">
+  Optional description
+</ParamField>
+
+<ParamField path="content" type="string" required>
+  Template content (markdown)
+</ParamField>
+
+<ResponseField name="template_id" type="i64">
+  ID of created template
+</ResponseField>
+
+**Source:** `lib.rs:1296-1306`
+
+---
+
+### delete_journal_template
+
+Delete a journal template.
+
+<ParamField path="id" type="i64" required>
+  Template ID
+</ParamField>
+
+<ResponseField name="deleted" type="boolean">
+  True if template was deleted
+</ResponseField>
+
+**Source:** `lib.rs:1308-1316`
+
+---
+
+### generate_journal_summary
+
+Generate AI-powered summary of journal entries for a period.
+
+<ParamField path="period_type" type="string" required>
+  Period type ("week", "month", etc.)
+</ParamField>
+
+<ParamField path="period_key" type="string" required>
+  Period identifier (e.g., "2024-W12")
+</ParamField>
+
+<ParamField path="start_date" type="string" required>
+  Start date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="end_date" type="string" required>
+  End date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="force_regenerate" type="boolean | null" default="false">
+  Bypass cache and regenerate
+</ParamField>
+
+<ResponseField name="summary" type="JournalSummary">
+  Generated summary with insights
+</ResponseField>
+
+**Source:** `lib.rs:1318-1451`
+
+---
+
+### export_journal
+
+Export journal entries to Markdown.
+
+<ParamField path="start_date" type="string" required>
+  Start date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="end_date" type="string" required>
+  End date (YYYY-MM-DD)
+</ParamField>
+
+<ResponseField name="markdown" type="string">
+  Markdown-formatted journal export
+</ResponseField>
+
+**Source:** `lib.rs:1453-1462`
+
+---
+
+## Settings
+
+### get_config
+
+Get current application configuration.
+
+<ResponseField name="config" type="serde_json::Value">
+  Full config object
+</ResponseField>
+
+**Source:** `lib.rs:1494-1501`
+
+---
+
+### update_config
+
+Update application configuration and save to disk.
+
+<ParamField path="config_json" type="serde_json::Value" required>
+  New config object (must conform to AppConfig schema)
+</ParamField>
+
+<ResponseField name="result" type="void">
+  No return value
+</ResponseField>
+
+**Source:** `lib.rs:1503-1523`
+
+---
+
+## Type Definitions
+
+All request and response types are defined in `rewindos-core/src/schema.rs`. Key types:
+
+- `SearchResponse` — Search results with deduplication metadata
+- `SearchFilters` — Search query filters
+- `Screenshot` — Screenshot metadata
+- `ActivityResponse` — Hourly/daily activity stats
+- `Bookmark` — Bookmark metadata
+- `Collection` — Screenshot collection
+- `JournalEntry` — Journal entry
+- `JournalTag` — Tag metadata
+- `JournalTemplate` — Journal template
+- `DaemonStatus` — Daemon status
+
+Refer to the source code for detailed type definitions.

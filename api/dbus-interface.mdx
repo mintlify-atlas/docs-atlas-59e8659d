@@ -1,0 +1,461 @@
+---
+title: 'D-Bus Interface'
+description: 'D-Bus API contract for the RewindOS daemon service'
+---
+
+The RewindOS daemon exposes a D-Bus service on the **session bus** for control by the Tauri UI, CLI tools, and desktop integration.
+
+## Service Details
+
+| Field | Value |
+|---|---|
+| Bus | Session (user) |
+| Bus Name | `com.rewindos.Daemon` |
+| Object Path | `/com/rewindos/Daemon` |
+| Interface | `com.rewindos.Daemon` |
+
+## Methods
+
+### Pause
+
+Pauses screen capture. Frames already in the pipeline will finish processing.
+
+<ParamField path="Request" type="void">
+  No parameters
+</ParamField>
+
+<ResponseField name="Response" type="void">
+  No return value
+</ResponseField>
+
+**Errors:**
+- `com.rewindos.Error.NotRunning` — pipeline not started
+
+**Implementation:** `service.rs:40-49`
+
+```rust
+async fn pause(&mut self) -> zbus::fdo::Result<()>
+```
+
+---
+
+### Resume
+
+Resumes screen capture after pause.
+
+<ParamField path="Request" type="void">
+  No parameters
+</ParamField>
+
+<ResponseField name="Response" type="void">
+  No return value
+</ResponseField>
+
+**Errors:**
+- `com.rewindos.Error.AlreadyRunning` — already capturing
+
+**Implementation:** `service.rs:51-60`
+
+```rust
+async fn resume(&mut self) -> zbus::fdo::Result<()>
+```
+
+---
+
+### GetStatus
+
+Returns current daemon status as JSON.
+
+<ResponseField name="status_json" type="string">
+  JSON-encoded daemon status object
+</ResponseField>
+
+**Response Format:**
+
+<CodeGroup>
+```json Response Schema
+{
+  "is_capturing": true,
+  "frames_captured_today": 2847,
+  "frames_deduplicated_today": 1523,
+  "frames_ocr_pending": 3,
+  "queue_depths": {
+    "capture": 0,
+    "hash": 1,
+    "ocr": 3,
+    "index": 0
+  },
+  "uptime_seconds": 28847,
+  "disk_usage_bytes": 1073741824,
+  "last_capture_timestamp": 1706140800,
+  "capture_interval": 5,
+  "capture_backend": "PipeWire",
+  "window_info_provider": "KWin",
+  "desktop": "KDE Plasma",
+  "session": "wayland"
+}
+```
+</CodeGroup>
+
+<Expandable title="Response Fields">
+  <ResponseField name="is_capturing" type="boolean" required>
+    Whether the capture pipeline is currently active
+  </ResponseField>
+  
+  <ResponseField name="frames_captured_today" type="u64" required>
+    Total number of frames captured today
+  </ResponseField>
+  
+  <ResponseField name="frames_deduplicated_today" type="u64" required>
+    Number of frames deduplicated today
+  </ResponseField>
+  
+  <ResponseField name="frames_ocr_pending" type="u64" required>
+    Number of frames waiting for OCR processing
+  </ResponseField>
+  
+  <ResponseField name="queue_depths" type="object" required>
+    Current queue depths for each pipeline stage
+    <Expandable title="Properties">
+      <ResponseField name="capture" type="u64">
+        Capture queue depth
+      </ResponseField>
+      <ResponseField name="hash" type="u64">
+        Hash queue depth
+      </ResponseField>
+      <ResponseField name="ocr" type="u64">
+        OCR queue depth
+      </ResponseField>
+      <ResponseField name="index" type="u64">
+        Index queue depth
+      </ResponseField>
+    </Expandable>
+  </ResponseField>
+  
+  <ResponseField name="uptime_seconds" type="u64" required>
+    Daemon uptime in seconds
+  </ResponseField>
+  
+  <ResponseField name="disk_usage_bytes" type="u64" required>
+    Total disk space used by screenshots
+  </ResponseField>
+  
+  <ResponseField name="capture_interval" type="u32" required>
+    Current capture interval in seconds
+  </ResponseField>
+  
+  <ResponseField name="last_capture_timestamp" type="i64 | null">
+    Unix timestamp of last captured frame
+  </ResponseField>
+  
+  <ResponseField name="capture_backend" type="string | null">
+    Name of capture backend (e.g., "PipeWire")
+  </ResponseField>
+  
+  <ResponseField name="window_info_provider" type="string | null">
+    Name of window info provider (e.g., "KWin", "wlr-foreign-toplevel")
+  </ResponseField>
+  
+  <ResponseField name="desktop" type="string | null">
+    Desktop environment name
+  </ResponseField>
+  
+  <ResponseField name="session" type="string | null">
+    Session type (e.g., "wayland", "x11")
+  </ResponseField>
+</Expandable>
+
+**Implementation:** `service.rs:62-101`
+
+```rust
+async fn get_status(&self) -> zbus::fdo::Result<String>
+```
+
+---
+
+### Search
+
+Search OCR text across all screenshots using FTS5 full-text search or hybrid search (FTS5 + vector similarity).
+
+<ParamField path="query" type="string" required>
+  FTS5 search query. Supports:
+  - Boolean operators: `AND`, `OR`, `NOT`
+  - Phrases: `"exact phrase"`
+  - Prefix matching: `term*`
+</ParamField>
+
+<ParamField path="filters_json" type="string" required>
+  JSON-encoded filter object. Pass `"{}"` for default filters.
+</ParamField>
+
+**Filter Schema:**
+
+<CodeGroup>
+```json Filter Example
+{
+  "start_time": 1706054400,
+  "end_time": 1706140800,
+  "app_name": "firefox",
+  "limit": 50,
+  "offset": 0
+}
+```
+</CodeGroup>
+
+<Expandable title="Filter Fields (all optional)">
+  <ParamField path="start_time" type="i64">
+    Filter results after this Unix timestamp (inclusive)
+  </ParamField>
+  
+  <ParamField path="end_time" type="i64">
+    Filter results before this Unix timestamp (inclusive)
+  </ParamField>
+  
+  <ParamField path="app_name" type="string">
+    Filter by application name (partial match)
+  </ParamField>
+  
+  <ParamField path="limit" type="i64" default="50">
+    Maximum number of results to return
+  </ParamField>
+  
+  <ParamField path="offset" type="i64" default="0">
+    Number of results to skip (for pagination)
+  </ParamField>
+</Expandable>
+
+<ResponseField name="results_json" type="string">
+  JSON-encoded search response with results and metadata
+</ResponseField>
+
+**Response Format:**
+
+<CodeGroup>
+```json Response Schema
+{
+  "results": [
+    {
+      "id": 12345,
+      "timestamp": 1706137200,
+      "app_name": "firefox",
+      "window_title": "Stack Overflow - How to...",
+      "thumbnail_path": "screenshots/2025-01-25/thumbs/1706137200.webp",
+      "file_path": "screenshots/2025-01-25/1706137200.webp",
+      "matched_text": "...the <mark>PostgreSQL</mark> connection pool was...",
+      "rank": -12.5,
+      "group_count": 5,
+      "group_screenshot_ids": [12345, 12340, 12335, 12330, 12325]
+    }
+  ],
+  "total_count": 142,
+  "search_mode": "hybrid"
+}
+```
+</CodeGroup>
+
+<Expandable title="Response Fields">
+  <ResponseField name="results" type="array" required>
+    Array of search result objects
+    <Expandable title="Result Object">
+      <ResponseField name="id" type="i64" required>
+        Screenshot ID
+      </ResponseField>
+      <ResponseField name="timestamp" type="i64" required>
+        Unix timestamp when captured
+      </ResponseField>
+      <ResponseField name="app_name" type="string | null">
+        Application name
+      </ResponseField>
+      <ResponseField name="window_title" type="string | null">
+        Window title at capture time
+      </ResponseField>
+      <ResponseField name="thumbnail_path" type="string | null">
+        Path to thumbnail image
+      </ResponseField>
+      <ResponseField name="file_path" type="string" required>
+        Path to full screenshot
+      </ResponseField>
+      <ResponseField name="matched_text" type="string">
+        OCR text snippet with `<mark>` tags around matches
+      </ResponseField>
+      <ResponseField name="rank" type="f64">
+        FTS5 rank score (negative = better match)
+      </ResponseField>
+      <ResponseField name="group_count" type="i64">
+        Number of visually similar screenshots grouped under this result (only present when > 1)
+      </ResponseField>
+      <ResponseField name="group_screenshot_ids" type="array[i64]">
+        IDs of all screenshots in the scene deduplication group (only present when grouped)
+      </ResponseField>
+    </Expandable>
+  </ResponseField>
+  
+  <ResponseField name="total_count" type="i64" required>
+    Total number of matches (before pagination)
+  </ResponseField>
+  
+  <ResponseField name="search_mode" type="string" required>
+    Search strategy used:
+    - `"keyword"` — FTS5 full-text search only
+    - `"hybrid"` — FTS5 + vector similarity fused with Reciprocal Rank Fusion (RRF)
+  </ResponseField>
+</Expandable>
+
+**Implementation:** `service.rs:103-147`
+
+```rust
+async fn search(&self, query: &str, filters_json: &str) -> zbus::fdo::Result<String>
+```
+
+---
+
+### DeleteRange
+
+Delete all screenshots and associated data in the given time range. Also deletes WebP files from disk.
+
+<ParamField path="start_timestamp" type="i64" required>
+  Unix timestamp marking start of range (inclusive)
+</ParamField>
+
+<ParamField path="end_timestamp" type="i64" required>
+  Unix timestamp marking end of range (inclusive)
+</ParamField>
+
+<ResponseField name="deleted_count" type="u64">
+  Number of screenshots deleted
+</ResponseField>
+
+**Implementation:** `service.rs:149-162`
+
+```rust
+async fn delete_range(&self, start: i64, end: i64) -> zbus::fdo::Result<u64>
+```
+
+---
+
+### ReportActiveWindow
+
+Called by the KWin tracking script when the active window changes. No-op if a non-KWin window info provider is active.
+
+<ParamField path="caption" type="string" required>
+  Window caption/title
+</ParamField>
+
+<ParamField path="resource_class" type="string" required>
+  Window resource class (app identifier)
+</ParamField>
+
+<ParamField path="resource_name" type="string" required>
+  Window resource name
+</ParamField>
+
+<ResponseField name="Response" type="void">
+  No return value
+</ResponseField>
+
+**Implementation:** `service.rs:164-174`
+
+```rust
+async fn report_active_window(&self, caption: &str, resource_class: &str, resource_name: &str)
+```
+
+---
+
+## Properties
+
+### IsCapturing
+
+Whether the capture pipeline is currently active. Emits `PropertiesChanged` signal when toggled.
+
+<ParamField path="Type" type="boolean">
+  Read-only property
+</ParamField>
+
+**Implementation:** `service.rs:176-179`
+
+```rust
+#[zbus(property)]
+fn is_capturing(&self) -> bool
+```
+
+---
+
+### CaptureInterval
+
+Current capture interval in seconds. Writing updates the timer immediately. Emits `PropertiesChanged` signal when changed.
+
+<ParamField path="Type" type="u32">
+  Read-only property (config changes require daemon restart)
+</ParamField>
+
+**Implementation:** `service.rs:181-184`
+
+```rust
+#[zbus(property)]
+fn capture_interval(&self) -> u32
+```
+
+---
+
+## Signals
+
+### CaptureStateChanged
+
+Emitted when capture is paused or resumed. UI should update tray icon and status indicator.
+
+<ParamField path="is_capturing" type="boolean">
+  New capture state
+</ParamField>
+
+---
+
+## Testing with busctl
+
+<CodeGroup>
+```bash Check if daemon is running
+busctl --user list | grep rewindos
+```
+
+```bash Get status
+busctl --user call com.rewindos.Daemon /com/rewindos/Daemon com.rewindos.Daemon GetStatus
+```
+
+```bash Pause capture
+busctl --user call com.rewindos.Daemon /com/rewindos/Daemon com.rewindos.Daemon Pause
+```
+
+```bash Resume capture
+busctl --user call com.rewindos.Daemon /com/rewindos/Daemon com.rewindos.Daemon Resume
+```
+
+```bash Search
+busctl --user call com.rewindos.Daemon /com/rewindos/Daemon com.rewindos.Daemon Search ss "postgresql" "{}"
+```
+
+```bash Monitor signals
+busctl --user monitor com.rewindos.Daemon
+```
+</CodeGroup>
+
+---
+
+## Rust Client Interface
+
+The Tauri UI connects to the daemon using `zbus::Connection`:
+
+```rust
+let dbus = zbus::blocking::Connection::session()
+    .map(|c| c.into_inner())?;
+
+let reply = dbus
+    .call_method(
+        Some("com.rewindos.Daemon"),
+        "/com/rewindos/Daemon",
+        Some("com.rewindos.Daemon"),
+        "GetStatus",
+        &(),
+    )
+    .await?;
+
+let status_json: String = reply.body().deserialize()?;
+```

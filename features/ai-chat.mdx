@@ -1,0 +1,389 @@
+---
+title: AI Chat
+description: Ask questions about your screen history with AI-powered intent detection and screenshot context
+---
+
+The Ask view provides an AI-powered chat interface to query your screen history using natural language. RewindOS understands your questions, retrieves relevant screenshots, and answers with context.
+
+<Note>
+AI Chat requires Ollama running locally with the chat model (default: `qwen2.5:3b`).
+</Note>
+
+## Getting Started
+
+<Steps>
+  <Step title="Install Ollama">
+    Download and install Ollama:
+    ```bash
+    curl -fsSL https://ollama.com/install.sh | sh
+    ```
+  </Step>
+  
+  <Step title="Pull the chat model">
+    ```bash
+    ollama pull qwen2.5:3b
+    ```
+    
+    You can use a different model by updating Settings → AI → Chat Model.
+  </Step>
+  
+  <Step title="Start the daemon">
+    RewindOS auto-detects Ollama on startup:
+    ```bash
+    systemctl --user restart rewindos-daemon
+    ```
+  </Step>
+  
+  <Step title="Open Ask view">
+    Click the Ask icon in the sidebar or press `Ctrl+Shift+Space` and navigate to Ask.
+  </Step>
+</Steps>
+
+The status indicator (top-left) shows Ollama connection status:
+- 🟢 **Green** — Connected and ready
+- 🔴 **Red** — Offline or unreachable
+
+## Asking Questions
+
+Type your question in natural language. RewindOS will:
+
+1. **Detect intent** — Classify your query type (recall, time-based, productivity, etc.)
+2. **Search screenshots** — Retrieve relevant captures using semantic or keyword search
+3. **Build context** — Extract OCR text and metadata from matching screenshots
+4. **Generate response** — Stream an answer with inline screenshot references
+
+### Example Queries
+
+<Tabs>
+  <Tab title="Recall">
+    Find specific information from past screens:
+    
+    ```
+    What was the error message I saw in the terminal this morning?
+    ```
+    
+    ```
+    Show me the Slack conversation about the deployment
+    ```
+  </Tab>
+  
+  <Tab title="Time-based">
+    Ask about activity in specific time periods:
+    
+    ```
+    What was I working on yesterday afternoon?
+    ```
+    
+    ```
+    Summarize my activity last week
+    ```
+  </Tab>
+  
+  <Tab title="Productivity">
+    Get insights about your work patterns:
+    
+    ```
+    How much time did I spend in VS Code today?
+    ```
+    
+    ```
+    What were my main distractions this week?
+    ```
+  </Tab>
+  
+  <Tab title="App-specific">
+    Filter by application:
+    
+    ```
+    What documentation did I read in Firefox today?
+    ```
+    
+    ```
+    Show me all my terminal commands from this morning
+    ```
+  </Tab>
+  
+  <Tab title="General">
+    Get summaries or explanations:
+    
+    ```
+    Give me a summary of today
+    ```
+    
+    ```
+    What did I do between 2-4 PM?
+    ```
+  </Tab>
+</Tabs>
+
+## Intent Detection
+
+RewindOS automatically classifies your question to optimize retrieval:
+
+| Intent Type | Optimization |
+|-------------|-------------|
+| **Recall** | Semantic search for conceptual matches |
+| **Time-based** | Time range filters + activity aggregation |
+| **Productivity** | App usage stats + active time calculation |
+| **App-specific** | App filter + focused context |
+| **General** | Broad search + summarization |
+
+<Info>
+You don't need to specify intent — the AI infers it from your question phrasing.
+</Info>
+
+## Screenshot References
+
+AI responses include clickable screenshot references:
+
+### Inline References
+
+References appear as `[#ID]` chips in the response:
+
+```
+You were working on the database migration [#1234] around 2 PM,
+then reviewed pull requests [#1235] [#1236].
+```
+
+Click any reference to jump to that screenshot in detail view.
+
+### Source Cards
+
+All referenced screenshots appear as source cards at the bottom:
+
+<Card>
+  **Screenshot #1234**
+  
+  📱 VS Code • 2:15 PM
+  
+  "...ALTER TABLE users ADD COLUMN last_login..."
+</Card>
+
+Cards show:
+- App name and timestamp
+- OCR snippet preview
+- Thumbnail on hover
+
+<Tip>
+If the AI doesn't explicitly reference screenshots in the text, all sources are shown in the sources section anyway.
+</Tip>
+
+## Chat Sessions
+
+Conversations are tracked in sessions:
+
+- **Context preservation** — Follow-up questions use previous context
+- **Session history** — Includes last 20 messages (configurable)
+- **New session** — Click "new chat" to start fresh
+
+### Multi-turn Conversations
+
+You can ask follow-up questions:
+
+```
+User: What was I working on this morning?
+AI: You were primarily working on the database migration in VS Code...
+
+User: What files did I modify?
+AI: Based on the screenshots, you modified schema.sql and migration.rs...
+```
+
+The AI maintains context across the conversation.
+
+<Note>
+Sessions are **not persisted** — they reset when you close RewindOS. This is intentional for privacy.
+</Note>
+
+## Streaming Responses
+
+Responses stream in real-time:
+
+- Partial text appears as it's generated
+- You can stop generation with the **"stop"** button
+- Markdown formatting is rendered live
+
+### Supported Markdown
+
+AI responses support rich formatting:
+
+- **Headings** (`#`, `##`, `###`)
+- **Lists** (bullet and numbered)
+- **Code blocks** with syntax highlighting
+- **Tables**
+- **Links** (auto-open in browser)
+- **Emphasis** (bold, italic)
+- **Blockquotes**
+
+## Configuration
+
+Customize AI Chat behavior in Settings → AI:
+
+<Tabs>
+  <Tab title="Model Selection">
+    **Chat Model**
+    
+    Default: `qwen2.5:3b`
+    
+    Recommended models:
+    - `qwen2.5:3b` — Fast, good quality (1.9GB)
+    - `llama3.2:3b` — Alternative lightweight option
+    - `mistral:7b` — Higher quality, slower (4.1GB)
+    - `llama3.1:8b` — Best quality, requires more RAM
+  </Tab>
+  
+  <Tab title="Temperature">
+    **Temperature**: 0.0 - 1.0
+    
+    Default: `0.3`
+    
+    - Lower (0.0-0.3) = More focused, deterministic
+    - Higher (0.7-1.0) = More creative, varied
+    
+    Recommended: Keep at 0.3 for factual recall.
+  </Tab>
+  
+  <Tab title="Context Limits">
+    **Max Context Tokens**: 4096 (default)
+    
+    Controls how much screenshot text is sent to the AI.
+    
+    **Max History Messages**: 20 (default)
+    
+    Number of previous messages to include for follow-ups.
+  </Tab>
+  
+  <Tab title="Ollama URL">
+    **Ollama URL**: `http://localhost:11434` (default)
+    
+    Change if Ollama runs on a different port or host.
+  </Tab>
+</Tabs>
+
+## Privacy & Security
+
+<Warning>
+**All data stays local**
+
+- Ollama runs on localhost (no external API calls)
+- Screenshots and OCR text never leave your machine
+- Chat sessions are not persisted to disk
+- No telemetry or analytics collected
+</Warning>
+
+<Info>
+RewindOS only sends OCR text to Ollama, not the actual screenshot images. Text is retrieved from the local SQLite database.
+</Info>
+
+## Performance Tips
+
+<AccordionGroup>
+  <Accordion title="Use a smaller model for speed">
+    `qwen2.5:3b` is faster than `mistral:7b`.
+    
+    Smaller models:
+    - Respond in 1-3 seconds
+    - Use less RAM (4-8GB)
+    - Good enough for most queries
+    
+    Pull a smaller model:
+    ```bash
+    ollama pull qwen2.5:3b
+    ```
+  </Accordion>
+  
+  <Accordion title="Be specific in your questions">
+    More specific queries return better results:
+    
+    ❌ "What did I do today?"
+    ✅ "What code files did I edit in VS Code between 2-4 PM?"
+    
+    Specific questions help narrow the screenshot search.
+  </Accordion>
+  
+  <Accordion title="Use time ranges">
+    Include time context in your query:
+    
+    - "this morning" → filters to today before noon
+    - "yesterday afternoon" → filters to previous day PM
+    - "last week" → filters to past 7 days
+  </Accordion>
+  
+  <Accordion title="Check Ollama is running">
+    Verify Ollama status:
+    ```bash
+    ollama list
+    curl http://localhost:11434/api/tags
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<Warning>
+**Red status indicator (Ollama offline)**
+
+1. Check if Ollama is running: `systemctl status ollama` or `ollama list`
+2. Verify the model is pulled: `ollama pull qwen2.5:3b`
+3. Check the URL in Settings → AI → Ollama URL
+4. Look for errors in daemon logs: `journalctl --user -u rewindos-daemon`
+</Warning>
+
+<Warning>
+**AI responses are generic or unhelpful**
+
+- Check if semantic search is enabled (Settings → Search)
+- Verify screenshots have OCR text (view in History)
+- Try more specific queries with time ranges
+- Check daemon logs for embedding errors
+</Warning>
+
+<Warning>
+**Responses are slow**
+
+- Use a smaller model (qwen2.5:3b instead of mistral:7b)
+- Reduce max context tokens in Settings → AI
+- Close other applications using Ollama
+- Check CPU/RAM usage during generation
+</Warning>
+
+<Tip>
+If the AI hallucinates or makes up information, try asking it to cite specific screenshots: "Show me the exact screenshot where..."
+</Tip>
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Enter` | Send message |
+| `Shift+Enter` | New line in input |
+| `Escape` | Close detail view |
+| `Ctrl+N` | New chat session |
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Recall Forgotten Details" icon="brain">
+    "What was the Zoom link I saw in Slack this morning?"
+  </Card>
+  <Card title="Activity Summaries" icon="list-check">
+    "Summarize what I worked on yesterday"
+  </Card>
+  <Card title="Code Review" icon="code">
+    "What files did I modify in VS Code today?"
+  </Card>
+  <Card title="Meeting Notes" icon="users">
+    "What did the design doc say about authentication?"
+  </Card>
+</CardGroup>
+
+## Technical Details
+
+Under the hood:
+
+- **Intent detection**: First LLM call classifies query type
+- **Screenshot retrieval**: Uses semantic or keyword search based on intent
+- **Context building**: Extracts OCR text (up to `max_context_tokens`)
+- **Response generation**: Streaming LLM call with screenshot context
+- **Reference injection**: AI includes `[REF:ID]` markers parsed client-side
+
+See `crates/rewindos-core/src/chat.rs` for implementation details.

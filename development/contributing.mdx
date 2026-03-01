@@ -1,0 +1,435 @@
+---
+title: Contributing to RewindOS
+description: Guidelines for contributing code, tests, and documentation to RewindOS
+---
+
+## Getting Started
+
+Thank you for considering contributing to RewindOS! This guide will help you understand our development workflow and standards.
+
+### Before You Start
+
+<Steps>
+  <Step title="Set Up Development Environment">
+    Follow the [Building](/development/building) guide to set up your local environment and verify everything works.
+  </Step>
+  
+  <Step title="Understand the Codebase">
+    Read the [Project Structure](/development/project-structure) guide to familiarize yourself with the architecture.
+  </Step>
+  
+  <Step title="Find an Issue">
+    Browse open issues on GitHub or propose a new feature in discussions.
+  </Step>
+  
+  <Step title="Fork and Clone">
+    ```bash
+    git clone https://github.com/yourusername/rewindos.git
+    cd rewindos
+    git checkout -b feature/your-feature-name
+    ```
+  </Step>
+</Steps>
+
+## Code Style Guidelines
+
+### Rust Code Style
+
+RewindOS follows standard Rust conventions with additional guidelines.
+
+<CodeGroup>
+```rust Formatting
+// Use rustfmt (runs automatically)
+cargo fmt --all
+
+// Check formatting without changing files
+cargo fmt --all -- --check
+```
+
+```rust Linting
+// Run clippy for lints
+cargo clippy --workspace --all-targets
+
+// Fix clippy warnings automatically
+cargo clippy --workspace --fix
+```
+</CodeGroup>
+
+**Rust Style Rules:**
+
+1. **Use descriptive variable names** - `screenshot_path` not `sp`
+2. **Prefer explicit types in public APIs** - Return `Result<Screenshot, Error>` not `Result<_>`
+3. **Document public functions** with doc comments:
+   ```rust
+   /// Performs hybrid search combining FTS5 and vector similarity.
+   ///
+   /// # Arguments
+   /// * `query` - Search query string
+   /// * `limit` - Maximum results to return
+   ///
+   /// # Returns
+   /// Deduplicated search results ranked by RRF score
+   pub fn hybrid_search(&self, query: &str, limit: usize) -> Result<SearchResponse> {
+       // implementation
+   }
+   ```
+4. **Use `thiserror` for error types** in libraries, `anyhow` for applications
+5. **Prefer `&str` over `String`** in function parameters when not taking ownership
+
+<Warning>
+All code must pass `cargo clippy` without warnings before being merged.
+</Warning>
+
+### TypeScript/React Code Style
+
+**Frontend Style Rules:**
+
+1. **Use TypeScript strict mode** - No `any` types without justification
+2. **Functional components with hooks** - No class components
+3. **Props interfaces for all components**:
+   ```tsx
+   interface SearchBarProps {
+     query: string;
+     onQueryChange: (query: string) => void;
+     semanticEnabled: boolean;
+   }
+   
+   export function SearchBar({ query, onQueryChange, semanticEnabled }: SearchBarProps) {
+     // component implementation
+   }
+   ```
+4. **Use Tailwind CSS** for styling - No inline styles
+5. **Prefer shadcn/ui components** over custom implementations
+
+## Testing Requirements
+
+All new features and bug fixes must include tests.
+
+### Writing Rust Tests
+
+<CodeGroup>
+```rust Unit Tests
+// In rewindos-core/src/db.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_scene_deduplication() {
+        // Setup
+        let db = Database::new_in_memory().unwrap();
+        
+        // Execute
+        let result = db.deduplicate_scenes(&screenshots).unwrap();
+        
+        // Verify
+        assert_eq!(result.len(), expected_count);
+    }
+}
+```
+
+```rust Integration Tests
+// In tests/integration_test.rs
+use rewindos_core::{Database, Config};
+
+#[tokio::test]
+async fn test_full_search_workflow() {
+    // Test end-to-end search flow
+}
+```
+</CodeGroup>
+
+**Test Coverage Requirements:**
+
+- **Core business logic**: 80%+ coverage
+- **Database operations**: All CRUD operations tested
+- **Search functionality**: Keyword, vector, hybrid, and dedup tested
+- **Error handling**: Test failure paths
+
+<Info>
+Run tests with `cargo test -p rewindos-core`. Add `-- --nocapture` to see print statements.
+</Info>
+
+### Running Tests
+
+```bash
+# Run all tests
+cargo test --workspace
+
+# Run specific crate tests
+cargo test -p rewindos-core
+
+# Run specific test
+cargo test -p rewindos-core test_scene_deduplication
+
+# Run tests with logging
+RUST_LOG=debug cargo test -p rewindos-core -- --nocapture
+```
+
+## Commit Message Guidelines
+
+Follow conventional commits format:
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Formatting, missing semicolons, etc.
+- `refactor`: Code restructuring without behavior change
+- `perf`: Performance improvements
+- `test`: Adding or updating tests
+- `chore`: Build process, dependencies, etc.
+
+**Examples:**
+
+<CodeGroup>
+```bash Feature
+feat(search): add hybrid search with RRF fusion
+
+Implements Reciprocal Rank Fusion to combine FTS5 and vector
+search results. Uses k=60 for ranking.
+
+Closes #123
+```
+
+```bash Bug Fix
+fix(daemon): handle PipeWire disconnection gracefully
+
+Adds exponential backoff retry logic when PipeWire stream
+disconnects unexpectedly.
+
+Fixes #456
+```
+
+```bash Documentation
+docs(readme): update build prerequisites
+
+Add libdbus-1-dev to system dependencies list.
+```
+</CodeGroup>
+
+## Pull Request Process
+
+<Steps>
+  <Step title="Create Feature Branch">
+    ```bash
+    git checkout -b feat/descriptive-name
+    # or
+    git checkout -b fix/issue-description
+    ```
+  </Step>
+  
+  <Step title="Make Changes">
+    - Write code following style guidelines
+    - Add tests for new functionality
+    - Update documentation if needed
+  </Step>
+  
+  <Step title="Run Quality Checks">
+    ```bash
+    # Format code
+    cargo fmt --all
+    
+    # Run linter
+    cargo clippy --workspace --all-targets
+    
+    # Run tests
+    cargo test --workspace
+    ```
+  </Step>
+  
+  <Step title="Commit Changes">
+    ```bash
+    git add .
+    git commit -m "feat(scope): description"
+    ```
+  </Step>
+  
+  <Step title="Push and Create PR">
+    ```bash
+    git push origin feat/descriptive-name
+    ```
+    
+    Open a PR on GitHub with:
+    - Clear description of changes
+    - Link to related issues
+    - Screenshots/videos for UI changes
+  </Step>
+</Steps>
+
+### PR Checklist
+
+Before submitting, ensure:
+
+- [ ] Code follows style guidelines (`cargo fmt`, `cargo clippy`)
+- [ ] All tests pass (`cargo test --workspace`)
+- [ ] New functionality includes tests
+- [ ] Documentation updated (if applicable)
+- [ ] Commit messages follow conventional commits
+- [ ] PR description clearly explains changes
+- [ ] No breaking changes (or clearly documented)
+
+## Documentation Standards
+
+### Code Documentation
+
+**Rust doc comments:**
+
+```rust
+/// Performs perceptual hashing on an image.
+///
+/// Uses gradient hash (8x8) via the image-hasher crate to generate
+/// a 64-bit hash that is resilient to minor visual changes.
+///
+/// # Arguments
+/// * `image_path` - Path to the image file
+///
+/// # Returns
+/// 64-bit perceptual hash as a byte array
+///
+/// # Errors
+/// Returns error if image cannot be read or decoded
+pub fn hash_image(image_path: &Path) -> Result<[u8; 8]> {
+    // implementation
+}
+```
+
+**TSDoc comments:**
+
+```typescript
+/**
+ * Fetches search results from the daemon via Tauri IPC.
+ * 
+ * @param query - Search query string
+ * @param page - Page number (0-indexed)
+ * @param semanticEnabled - Whether to use hybrid search
+ * @returns Promise resolving to paginated search results
+ */
+export async function search(
+  query: string,
+  page: number,
+  semanticEnabled: boolean
+): Promise<SearchResponse> {
+  // implementation
+}
+```
+
+### Updating Documentation
+
+When adding features, update relevant docs:
+
+1. **API changes**: Update `docs/dbus-api.md`
+2. **Database schema**: Update `docs/database-schema.md`
+3. **Architecture changes**: Update `docs/architecture.md`
+4. **New configuration**: Update `docs/configuration.md`
+5. **User-facing features**: Update README.md
+
+## Development Best Practices
+
+### Performance Considerations
+
+<Accordion title="Database Operations">
+  - Use transactions for batch inserts
+  - Index frequently queried columns
+  - Avoid N+1 queries - batch fetch with `WHERE id IN (?)`
+  - Profile slow queries with `EXPLAIN QUERY PLAN`
+</Accordion>
+
+<Accordion title="Memory Management">
+  - Use streaming for large result sets
+  - Limit in-memory buffers (bounded channels, result limits)
+  - Dispose of images after processing
+  - Monitor heap allocations in hot paths
+</Accordion>
+
+<Accordion title="Async/Await">
+  - Use `tokio::spawn` for CPU-bound work
+  - Prefer `tokio::fs` over `std::fs` for file I/O
+  - Don't block tokio runtime - use `spawn_blocking` for sync code
+  - Handle task cancellation gracefully
+</Accordion>
+
+### Error Handling
+
+**Use `Result` everywhere:**
+
+```rust
+// Good
+pub fn process_screenshot(path: &Path) -> Result<Screenshot> {
+    let image = read_image(path)?;
+    let hash = hash_image(&image)?;
+    Ok(Screenshot { ... })
+}
+
+// Bad - unwrap can panic
+pub fn process_screenshot(path: &Path) -> Screenshot {
+    let image = read_image(path).unwrap();  // Don't do this!
+    Screenshot { ... }
+}
+```
+
+**Context errors with `anyhow`:**
+
+```rust
+use anyhow::Context;
+
+let config = load_config()
+    .context("Failed to load config from ~/.rewindos/config.toml")?;
+```
+
+### Security Considerations
+
+<Warning>
+**Never commit:**
+- API keys or tokens
+- Test database files with real user data
+- Personal screenshots or sensitive information
+</Warning>
+
+**File permissions:**
+- Database: 0600 (user read/write only)
+- Screenshot directory: 0700 (user access only)
+- Config file: 0600
+
+**Input validation:**
+- Sanitize user input before database queries
+- Validate file paths to prevent directory traversal
+- Limit query result sizes to prevent DoS
+
+## Getting Help
+
+<CardGroup cols={2}>
+  <Card title="GitHub Discussions" icon="comments">
+    Ask questions and discuss features
+  </Card>
+  
+  <Card title="GitHub Issues" icon="circle-exclamation">
+    Report bugs and request features
+  </Card>
+  
+  <Card title="Code Review" icon="code-pull-request">
+    Request review on your pull requests
+  </Card>
+  
+  <Card title="Documentation" icon="book">
+    Read technical docs in `docs/` directory
+  </Card>
+</CardGroup>
+
+## License
+
+By contributing to RewindOS, you agree that your contributions will be licensed under the MIT License.
+
+---
+
+<Note>
+Thank you for contributing to RewindOS! Every contribution, no matter how small, helps make the project better.
+</Note>

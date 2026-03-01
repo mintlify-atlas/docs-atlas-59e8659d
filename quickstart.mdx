@@ -1,80 +1,311 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get from installation to your first search in under 5 minutes. Learn the basics of RewindOS search, history browsing, and AI chat.
 ---
 
-## Get started in three steps
+This guide walks you through using RewindOS for the first time. You'll learn how to search your screen history, browse the timeline, and chat with your data.
 
-Get your documentation site running locally and make your first customization.
+<Info>
+  **Before you start**: Make sure you've completed the [Installation](/installation) and the daemon is running.
+</Info>
 
-### Step 1: Set up your local environment
+## Verify daemon is running
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+Check that the background capture service is active:
 
-### Step 2: Deploy your changes
+```bash
+systemctl --user status rewindos-daemon
+```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+You should see `Active: active (running)`. If not, start it:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+```bash
+systemctl --user start rewindos-daemon
+```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Launch the UI
 
-### Step 3: Go live
+The UI autostarts minimized in the system tray. Look for the RewindOS icon in your tray.
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Steps>
+  <Step title="Open via global hotkey">
+    Press `Ctrl+Shift+Space` to instantly open the search window from anywhere.
+  </Step>
+
+  <Step title="Or launch manually">
+    If the tray icon isn't visible, launch the app:
+
+    ```bash
+    rewindos
+    ```
+
+    Or find "RewindOS" in your application launcher.
+  </Step>
+</Steps>
+
+## Perform your first search
+
+Once the UI is open, you'll see the search interface.
+
+### Wait for initial capture
+
+The daemon captures screenshots every 5 seconds by default. Wait 1-2 minutes for a few screenshots to be captured and indexed.
+
+Check capture status:
+
+```bash
+rewindos-daemon status
+```
+
+Look for:
+```json
+{
+  "is_capturing": true,
+  "frames_captured_today": 15,
+  "frames_deduplicated_today": 3,
+  "frames_ocr_pending": 0
+}
+```
+
+<Tip>
+  If `frames_ocr_pending` is > 0, OCR is still processing. Searches will work but may miss recent frames.
+</Tip>
+
+### Search for text
+
+Type a word or phrase you've seen on your screen recently:
+
+<Steps>
+  <Step title="Enter search query">
+    In the search bar at the top, type something you know appeared on your screen. For example:
+    - Application name: `firefox`
+    - Window title: `github`
+    - Text from a document: `database schema`
+    - Code snippet: `async fn search`
+  </Step>
+
+  <Step title="View results">
+    Results appear instantly (sub-100ms) with:
+    - Screenshot thumbnail
+    - Timestamp
+    - App name and window title
+    - OCR text snippet with highlighted matches
+
+    Click any result to view the full screenshot and complete OCR text.
+  </Step>
+
+  <Step title="Toggle view mode">
+    Switch between grid and list views using the toggle in the top-right. Grid view shows more results at once, list view shows more context.
+  </Step>
+</Steps>
+
+### Scene deduplication
+
+Notice some results have a `+N similar` badge. These are grouped "scenes" — near-identical screenshots with hamming distance ≤ 5.
+
+Click the badge to expand and see all screenshots in the group. This reduces clutter when you stayed on the same screen for a while.
+
+## Browse the timeline
+
+Navigate to the **History** view in the sidebar to see all screenshots chronologically.
+
+<Steps>
+  <Step title="Select date range">
+    Use the date picker to jump to a specific day, or scroll through today's activity.
+  </Step>
+
+  <Step title="Filter by app">
+    Select an app from the dropdown to see only screenshots from that application. Useful for tracking "What was I working on in VS Code yesterday?"
+  </Step>
+
+  <Step title="Click to view details">
+    Click any screenshot to open the detail view with full OCR text and metadata.
+  </Step>
+</Steps>
+
+## Use AI chat (if Ollama installed)
+
+If you installed Ollama, RewindOS can answer questions about your screen history using AI.
+
+<Note>
+  The daemon auto-detects Ollama on startup. If you installed Ollama after starting the daemon, restart it:
+  ```bash
+  make restart-daemon
+  ```
+</Note>
+
+### Ask questions
+
+Navigate to the **Ask** view in the sidebar:
+
+<CodeGroup>
+
+```text Recall query
+What was I working on this morning?
+```
+
+```text Time-based query
+Show me what I did between 2pm and 4pm
+```
+
+```text App-specific query
+What files did I edit in VS Code today?
+```
+
+```text Productivity query
+How much time did I spend on Slack today?
+```
+
+</CodeGroup>
+
+The AI analyzes your screen history and responds with a natural language answer, including screenshot references.
+
+### How it works
+
+1. **Intent classification**: The query is analyzed to determine what you're looking for (recall, time-based, productivity, etc.)
+2. **Context retrieval**: Relevant screenshots are fetched using hybrid search (FTS5 + vector similarity)
+3. **Response generation**: Ollama streams a response with screenshot references
+
+Click any screenshot reference to view the full image and OCR text.
+
+## View the dashboard
+
+Navigate to the **Dashboard** view to see:
+
+- **Activity timeline**: Hourly and daily breakdowns of when you were active
+- **App usage stats**: How much time you spent in each application
+- **Daily summary**: AI-generated summary of what you worked on (if Ollama installed)
+
+<Tip>
+  Daily summaries are cached. If you want to regenerate after more activity, click the refresh icon.
+</Tip>
+
+## Pause and resume capture
+
+Sometimes you need privacy. Pause capture when sharing your screen or entering sensitive data:
+
+<CodeGroup>
+
+```bash CLI
+rewindos-daemon pause   # Stop capturing
+rewindos-daemon resume  # Resume capturing
+rewindos-daemon status  # Check current state
+```
+
+```bash D-Bus (programmatic)
+busctl --user call com.rewindos.Daemon /com/rewindos/Daemon com.rewindos.Daemon Pause
+busctl --user call com.rewindos.Daemon /com/rewindos/Daemon com.rewindos.Daemon Resume
+```
+
+</CodeGroup>
+
+You can also pause from the **Settings** view in the UI.
+
+<Warning>
+  Remember to resume capture after your private session. The daemon does NOT auto-resume.
+</Warning>
+
+## Configure privacy exclusions
+
+Navigate to **Settings** → **Privacy** to exclude specific apps or window title patterns:
+
+```toml Example config.toml
+[privacy]
+excluded_apps = [
+  "keepassxc",
+  "1password",
+  "bitwarden",
+  "gnome-keyring"
+]
+excluded_title_patterns = [
+  "Private Browsing",
+  "Incognito",
+  "Password"
+]
+```
+
+When a window matches an exclusion rule, the daemon skips capture for that frame.
+
+<Info>
+  Changes to `config.toml` require a daemon restart: `make restart-daemon`
+</Info>
+
+## Search tips
+
+### FTS5 query syntax
+
+RewindOS uses SQLite FTS5 for keyword search. You can use:
+
+- **Phrase search**: `"exact phrase"`
+- **OR queries**: `term1 OR term2`
+- **Prefix matching**: `dat*` (matches "data", "database", "dataframe")
+- **Column filters**: `window_title:github` (search only window titles)
+
+Examples:
+
+```text
+"error handling" OR exception
+app_name:firefox window_title:github
+database schema diagram
+```
+
+### Hybrid search (with Ollama)
+
+When Ollama is available, searches use hybrid mode:
+
+1. **FTS5 keyword match** → up to 300 results
+2. **Vector KNN search** → up to 300 results
+3. **Reciprocal Rank Fusion (RRF)** → merge and re-rank by combined score
+4. **Scene deduplication** → group near-duplicates
+
+This means semantic queries like `"machine learning tutorial"` will match screenshots containing `"ML guide"` or `"neural network intro"` even if the exact phrase isn't present.
+
+<Tip>
+  A blue "ai search" badge appears when hybrid mode is active. If you only see "keyword", Ollama is unavailable.
+</Tip>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that you've performed your first search, explore:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Customize capture intervals, retention, and AI settings
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Learn how the capture pipeline and database work
+  </Card>
+  <Card title="CLI reference" icon="terminal" href="/cli-reference">
+    Use `rewindos-daemon` commands for scripting and automation
+  </Card>
+  <Card title="D-Bus API" icon="code" href="/dbus-api">
+    Integrate RewindOS with other applications
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Troubleshooting
+
+### No search results
+
+1. Wait 1-2 minutes for initial screenshots to be captured and indexed
+2. Check OCR status: `rewindos-daemon status` → `"frames_ocr_pending": 0`
+3. Verify screenshots exist: `ls ~/.rewindos/screenshots/$(date +%Y-%m-%d)/`
+
+### Hotkey not working
+
+1. Check if UI is running: `ps aux | grep rewindos`
+2. Launch manually: `rewindos`
+3. Check for conflicting hotkey in system settings
+
+### AI chat not available
+
+1. Verify Ollama is running: `curl http://localhost:11434/api/tags`
+2. Check daemon logs for "Ollama detected": `make logs`
+3. Manually pull models: `ollama pull nomic-embed-text && ollama pull qwen2.5:3b`
+4. Restart daemon: `make restart-daemon`
+
+### Slow performance
+
+- Check disk space: `df -h ~/.rewindos`
+- Reduce capture interval in Settings → Capture: `interval_seconds = 10`
+- Lower OCR workers in `config.toml`: `max_workers = 1`

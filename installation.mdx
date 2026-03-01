@@ -1,0 +1,260 @@
+---
+title: Installation
+description: Install RewindOS on KDE Plasma 6+ with Ubuntu 24.04+. Includes prerequisites, build steps, and post-install verification.
+---
+
+RewindOS is designed for KDE Plasma 6+ on Ubuntu 24.04+ (Wayland). This guide covers installing system dependencies, building the workspace, and setting up the daemon as a systemd service.
+
+## Prerequisites
+
+### System requirements
+
+- **OS**: Ubuntu 24.04+ or compatible Debian-based distro
+- **Desktop**: KDE Plasma 6+ (Wayland session)
+- **Architecture**: x86_64 or aarch64
+
+<Note>
+  Other Wayland compositors (GNOME, Hyprland, Sway) work but may have limited window metadata.
+</Note>
+
+### Required dependencies
+
+Install system packages for PipeWire capture, Tesseract OCR, and build tools:
+
+```bash
+sudo apt install \
+  libpipewire-0.3-dev \
+  tesseract-ocr tesseract-ocr-eng \
+  libclang-dev libsqlite3-dev \
+  libdbus-1-dev pkg-config build-essential
+```
+
+<Info>
+  **Why these dependencies?**
+  - `libpipewire-0.3-dev` — Screen capture via xdg-desktop-portal
+  - `tesseract-ocr` — OCR text extraction from screenshots
+  - `libdbus-1-dev` — IPC between daemon and UI
+  - `libclang-dev`, `pkg-config` — Required for Rust build system
+</Info>
+
+### Optional: Ollama for AI features
+
+Semantic search and chat require [Ollama](https://ollama.com) running locally:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+The daemon auto-detects Ollama on startup and pulls the required models (`nomic-embed-text` for embeddings, `qwen2.5:3b` for chat) if available.
+
+<Tip>
+  You can skip Ollama and use keyword-only search. Semantic search gracefully degrades if Ollama is unavailable.
+</Tip>
+
+### Rust toolchain
+
+RewindOS is built with Rust. Install via rustup:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+```
+
+Verify installation:
+
+```bash
+rustc --version
+cargo --version
+```
+
+### Bun package manager
+
+The frontend uses Bun for package management:
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+source $HOME/.bashrc  # or restart terminal
+```
+
+## Build and install
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/yourusername/rewindos.git
+    cd rewindos
+    ```
+  </Step>
+
+  <Step title="Run make install">
+    This builds the Rust workspace, frontend, and installs the daemon as a systemd user service:
+
+    ```bash
+    make install
+    ```
+
+    The `make install` target performs:
+    1. `bun run tauri build` — Build the React frontend and Tauri app
+    2. `cargo install --path crates/rewindos-daemon --root ~/.local` — Install daemon to `~/.local/bin`
+    3. Copy systemd service to `~/.config/systemd/user/`
+    4. Enable and start the daemon via `systemctl --user`
+    5. Install desktop files and autostart entry
+
+    <Info>
+      This may take 5-10 minutes on first build as Rust compiles dependencies.
+    </Info>
+  </Step>
+
+  <Step title="Verify installation">
+    Check daemon status:
+
+    ```bash
+    systemctl --user status rewindos-daemon
+    ```
+
+    You should see:
+    ```
+    ● rewindos-daemon.service - RewindOS Capture Daemon
+         Loaded: loaded (...)
+         Active: active (running)
+    ```
+
+    Check logs:
+
+    ```bash
+    make logs
+    # or
+    journalctl --user -u rewindos-daemon -f
+    ```
+
+    You should see:
+    ```
+    rewindos-daemon starting
+    database opened
+    Ollama detected — semantic search enabled  # if Ollama installed
+    capture pipeline started
+    D-Bus service registered at com.rewindos.Daemon
+    ```
+  </Step>
+</Steps>
+
+## Manual build (development)
+
+For development, you can build components separately:
+
+<CodeGroup>
+
+```bash Build daemon only
+cargo build --release -p rewindos-daemon
+./target/release/rewindos-daemon
+```
+
+```bash Build UI in dev mode
+bun install
+bun run tauri dev
+```
+
+```bash Run tests
+cargo test --workspace
+```
+
+</CodeGroup>
+
+## Post-install configuration
+
+### Grant portal permissions
+
+On first capture, xdg-desktop-portal will prompt for screen recording permission. Click "Allow" to grant access.
+
+<Warning>
+  If you deny permission, the daemon cannot capture screens. Check logs with `make logs` if capture fails.
+</Warning>
+
+### Autostart on login
+
+The UI is configured to autostart minimized in the system tray on login. If you don't see the tray icon:
+
+```bash
+rewindos  # Launch manually
+```
+
+### Verify hotkey registration
+
+Press `Ctrl+Shift+Space` to open the search UI. If the hotkey doesn't work:
+
+1. Check if another app is using the same hotkey
+2. Verify the UI process is running: `ps aux | grep rewindos`
+3. Check UI logs in `~/.rewindos/logs/`
+
+## Directory structure
+
+After installation, RewindOS creates:
+
+```
+~/.rewindos/
+├── config.toml                    # User configuration
+├── rewindos.db                    # SQLite database (FTS5 + sqlite-vec)
+├── screenshots/
+│   └── YYYY-MM-DD/
+│       ├── {timestamp_ms}.webp    # Full screenshots (~50-100KB each)
+│       └── thumbs/
+│           └── {timestamp_ms}.webp  # 320px wide thumbnails (~5-10KB)
+└── logs/
+    └── daemon.log
+```
+
+## Troubleshooting
+
+### Daemon fails to start
+
+Check logs for errors:
+
+```bash
+make logs
+```
+
+Common issues:
+- **tesseract not found**: Install `tesseract-ocr`
+- **portal permission denied**: Grant screen recording permission in xdg-desktop-portal prompt
+- **D-Bus name already taken**: Stop existing daemon: `systemctl --user stop rewindos-daemon`
+
+### No screenshots captured
+
+1. Verify daemon is running: `systemctl --user status rewindos-daemon`
+2. Check capture is enabled: `rewindos-daemon status` → `"is_capturing": true`
+3. Check logs for PipeWire errors: `make logs`
+
+### Semantic search not working
+
+1. Verify Ollama is running: `curl http://localhost:11434/api/tags`
+2. Check daemon logs for "Ollama detected"
+3. Manually pull models:
+   ```bash
+   ollama pull nomic-embed-text
+   ollama pull qwen2.5:3b
+   ```
+4. Restart daemon: `make restart-daemon`
+
+## Uninstall
+
+To remove RewindOS:
+
+```bash
+make uninstall
+```
+
+This stops and disables the daemon, removes binaries and desktop files. To also delete data:
+
+```bash
+rm -rf ~/.rewindos
+```
+
+<Warning>
+  Deleting `~/.rewindos/` permanently removes all screenshots and search history.
+</Warning>
+
+## Next steps
+
+<Card title="Quickstart guide" icon="rocket" href="/quickstart">
+  Learn how to search, browse history, and use AI features
+</Card>

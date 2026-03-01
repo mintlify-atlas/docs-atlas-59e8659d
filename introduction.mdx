@@ -1,0 +1,103 @@
+---
+title: Introduction
+description: Privacy-first, local-only screen capture and search for Linux. Continuously captures your screen, extracts text via OCR, and lets you instantly search through everything you've seen.
+---
+
+RewindOS is a privacy-first, local-only screen capture and search tool for Linux/Wayland. It continuously captures your screen, extracts text via OCR, and lets you instantly search through everything you've seen. All data stays on your machine.
+
+## How it works
+
+A background daemon captures screenshots every 5 seconds, deduplicates them with perceptual hashing, runs OCR via Tesseract, and indexes the extracted text into SQLite FTS5. A Tauri desktop app provides the search UI.
+
+```
+Timer (5s) → Screen Capture → Hash & Dedupe → OCR → SQLite FTS5
+```
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install RewindOS on KDE Plasma 6+ with Ubuntu 24.04+
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get from installation to your first search in under 5 minutes
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Understand the capture pipeline, database schema, and system design
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Customize capture intervals, privacy rules, and AI features
+  </Card>
+</CardGroup>
+
+## Key features
+
+### Full-text search
+
+Search across everything on your screen with sub-100ms queries powered by SQLite FTS5. Results include OCR text snippets with highlighting.
+
+### Intelligent deduplication
+
+Perceptual hashing automatically skips near-identical frames, reducing storage by ~70%. Screenshots with hamming distance ≤ 5 are grouped as the same "scene".
+
+### Privacy controls
+
+Exclude specific apps (password managers, private browsing) or window title patterns. All data stays local in `~/.rewindos/` — no network requests except optional local Ollama.
+
+### AI-powered search
+
+Optional semantic search and chat with your screen history via Ollama. The daemon auto-detects Ollama on startup, pulls the embedding model if missing, and enables hybrid search transparently.
+
+<Info>
+  Semantic search uses `nomic-embed-text` for embeddings and `qwen2.5:3b` for chat. Both are pulled automatically when Ollama is detected.
+</Info>
+
+### Dashboard & analytics
+
+Activity overview with app usage stats, daily summaries, hourly breakdowns, and timeline browsing. See what you worked on and for how long.
+
+### Global hotkey
+
+Press `Ctrl+Shift+Space` to instantly open the search UI from anywhere. The app runs quietly in the system tray.
+
+## Target platform
+
+KDE Plasma 6+ on Ubuntu 24.04+ (Wayland). The capture backend uses xdg-desktop-portal and PipeWire, with window info via KWin D-Bus.
+
+<Note>
+  Other Wayland compositors (GNOME, Hyprland, Sway) are supported but may have limited window metadata.
+</Note>
+
+## Storage estimates
+
+At default settings (~5s interval, 8h/day):
+
+| Metric | Estimate |
+|---|---|
+| Frames/day (after dedup) | ~2,880 |
+| Storage/day | ~210 MB |
+| 90-day retention | ~19 GB |
+
+Screenshots are stored as WebP in `~/.rewindos/screenshots/YYYY-MM-DD/`. Retention is configurable.
+
+## Architecture overview
+
+RewindOS consists of three main components:
+
+1. **rewindos-daemon** — Background systemd service that captures screens via PipeWire, runs OCR, and indexes to SQLite
+2. **rewindos** — Tauri desktop app with React 19 + shadcn/ui for search, history, dashboard, and settings
+3. **rewindos-core** — Shared Rust library with database, OCR, hashing, embeddings, and chat logic
+
+The daemon and UI communicate over D-Bus (`com.rewindos.Daemon`) for search, pause/resume, and status queries.
+
+## Next steps
+
+<Steps>
+  <Step title="Install dependencies">
+    Install Tesseract OCR, PipeWire, and build tools — see [Installation](/installation)
+  </Step>
+  <Step title="Build and install">
+    Run `make install` to build the workspace and set up the daemon as a systemd service
+  </Step>
+  <Step title="Perform your first search">
+    Press `Ctrl+Shift+Space` to open search — see [Quickstart](/quickstart)
+  </Step>
+</Steps>

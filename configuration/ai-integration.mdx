@@ -1,0 +1,752 @@
+---
+title: "AI Integration"
+description: "Configure Ollama for semantic search and AI chat features in RewindOS"
+---
+
+## Overview
+
+RewindOS integrates with [Ollama](https://ollama.ai) to provide:
+
+1. **Semantic Search**: Vector embeddings for meaning-based search beyond keyword matching
+2. **AI Chat**: Conversational interface to ask questions about your screen history
+
+All AI processing happens locally via Ollama running on `localhost:11434`. No data leaves your machine.
+
+<Info>
+**Optional Feature**: RewindOS works perfectly with keyword-only search. Ollama integration is entirely optional and auto-detected at runtime.
+</Info>
+
+## Quick Start
+
+<Steps>
+  <Step title="Install Ollama">
+    ```bash
+    # Linux (official installer)
+    curl -fsSL https://ollama.com/install.sh | sh
+    
+    # Or via package manager
+    # Arch: yay -S ollama
+    # Fedora: sudo dnf install ollama
+    ```
+  </Step>
+  
+  <Step title="Start Ollama service">
+    ```bash
+    systemctl --user start ollama
+    systemctl --user enable ollama  # Auto-start on boot
+    ```
+  </Step>
+  
+  <Step title="Restart RewindOS daemon">
+    The daemon auto-detects Ollama and pulls required models on startup:
+    
+    ```bash
+    systemctl --user restart rewindos-daemon
+    ```
+    
+    Check logs to verify:
+    ```bash
+    tail -f ~/.rewindos/logs/daemon.log | grep -i ollama
+    ```
+    
+    You should see:
+    ```
+    [INFO] Ollama detected at http://localhost:11434
+    [INFO] Pulling embedding model: nomic-embed-text
+    [INFO] Pulling chat model: qwen2.5:7b
+    [INFO] Semantic search enabled
+    ```
+  </Step>
+</Steps>
+
+That's it! Semantic search and AI chat are now active.
+
+## Semantic Search Configuration
+
+The `[semantic]` section controls vector embedding for meaning-based search.
+
+### Semantic Settings
+
+<ParamField path="semantic.enabled" type="boolean" default="false">
+  Enable semantic search. **Note**: This is auto-enabled at runtime if Ollama is detected and the embedding model is available.
+  
+  ```toml
+  [semantic]
+  enabled = false  # Overridden by auto-detection
+  ```
+  
+  <Tip>
+  Leave this as `false` in config. The daemon will enable it automatically if Ollama is reachable.
+  </Tip>
+</ParamField>
+
+<ParamField path="semantic.ollama_url" type="string" default="http://localhost:11434">
+  Ollama server URL. Should be `localhost:11434` for standard installations.
+  
+  ```toml
+  [semantic]
+  ollama_url = "http://localhost:11434"
+  ```
+  
+  <Info>
+  Remote Ollama servers are supported but not recommended (network latency + privacy).
+  </Info>
+</ParamField>
+
+<ParamField path="semantic.model" type="string" default="nomic-embed-text">
+  Embedding model to use. Must be compatible with Ollama's `/api/embeddings` endpoint.
+  
+  **Recommended models:**
+  - `nomic-embed-text` - 768D embeddings, 137M params, excellent for English text (default)
+  - `all-minilm` - 384D embeddings, 22M params, faster but less accurate
+  - `mxbai-embed-large` - 1024D embeddings, 335M params, highest quality
+  
+  ```toml
+  [semantic]
+  model = "nomic-embed-text"
+  ```
+  
+  <Warning>
+  Changing the model requires re-embedding all screenshots. See [Backfill Embeddings](#backfill-embeddings).
+  </Warning>
+</ParamField>
+
+<ParamField path="semantic.embedding_dimensions" type="integer" default="768">
+  Expected embedding vector dimensions. Must match the model's output dimensions.
+  
+  | Model              | Dimensions |
+  |--------------------|------------|
+  | nomic-embed-text   | 768        |
+  | all-minilm         | 384        |
+  | mxbai-embed-large  | 1024       |
+  | bge-large          | 1024       |
+  
+  ```toml
+  [semantic]
+  embedding_dimensions = 768
+  ```
+</ParamField>
+
+### Complete Semantic Example
+
+<CodeGroup>
+```toml Default (nomic-embed-text)
+[semantic]
+enabled = false  # Auto-enabled
+ollama_url = "http://localhost:11434"
+model = "nomic-embed-text"
+embedding_dimensions = 768
+```
+
+```toml Lightweight (all-minilm)
+[semantic]
+enabled = false
+ollama_url = "http://localhost:11434"
+model = "all-minilm"
+embedding_dimensions = 384
+```
+
+```toml High Quality (mxbai-embed-large)
+[semantic]
+enabled = false
+ollama_url = "http://localhost:11434"
+model = "mxbai-embed-large"
+embedding_dimensions = 1024
+```
+</CodeGroup>
+
+## Chat Configuration
+
+The `[chat]` section controls the Ask AI conversational interface.
+
+### Chat Settings
+
+<ParamField path="chat.enabled" type="boolean" default="true">
+  Enable the Ask AI chat feature. Requires Ollama to be running.
+  
+  ```toml
+  [chat]
+  enabled = true
+  ```
+</ParamField>
+
+<ParamField path="chat.ollama_url" type="string" default="http://localhost:11434">
+  Ollama server URL for chat completions. Should match `semantic.ollama_url`.
+  
+  ```toml
+  [chat]
+  ollama_url = "http://localhost:11434"
+  ```
+</ParamField>
+
+<ParamField path="chat.model" type="string" default="qwen2.5:7b">
+  Chat completion model. Must support Ollama's `/api/chat` endpoint.
+  
+  **Recommended models:**
+  - `qwen2.5:7b` - 7B params, excellent instruction-following, fast (default)
+  - `qwen2.5:3b` - 3B params, faster but less capable
+  - `llama3.2:3b` - 3B params, Meta's Llama 3.2
+  - `mistral:7b` - 7B params, strong general-purpose model
+  - `phi3:14b` - 14B params, Microsoft's high-quality model
+  
+  ```toml
+  [chat]
+  model = "qwen2.5:7b"
+  ```
+  
+  <Tip>
+  For laptops/low-RAM systems, use `qwen2.5:3b` (~2GB RAM). For desktops, `qwen2.5:7b` (~5GB RAM) is recommended.
+  </Tip>
+</ParamField>
+
+<ParamField path="chat.max_context_tokens" type="integer" default="6144">
+  Maximum context window size in tokens. Limits how much screenshot OCR text + chat history is sent to the model.
+  
+  **Token estimation:**
+  - 1 token ≈ 4 characters of English text
+  - 1 screenshot's OCR text ≈ 100-500 tokens
+  - 1 chat message ≈ 20-100 tokens
+  
+  ```toml
+  [chat]
+  max_context_tokens = 6144
+  ```
+  
+  <Warning>
+  Exceeding the model's context window causes truncation. Check model specs:
+  - `qwen2.5:7b` supports up to 32k tokens
+  - `llama3.2:3b` supports up to 8k tokens
+  </Warning>
+</ParamField>
+
+<ParamField path="chat.max_history_messages" type="integer" default="20">
+  Maximum number of chat messages to retain in history. Older messages are dropped to stay within `max_context_tokens`.
+  
+  ```toml
+  [chat]
+  max_history_messages = 20
+  ```
+</ParamField>
+
+<ParamField path="chat.temperature" type="float" default="0.5">
+  Response creativity/randomness (0.0 = deterministic, 1.0 = creative).
+  
+  **Guidelines:**
+  - `0.0-0.3` - Factual, deterministic responses (good for Q&A)
+  - `0.4-0.7` - Balanced creativity and consistency (recommended)
+  - `0.8-1.0` - Creative, varied responses (good for brainstorming)
+  
+  ```toml
+  [chat]
+  temperature = 0.5
+  ```
+</ParamField>
+
+### Complete Chat Example
+
+<CodeGroup>
+```toml Default (qwen2.5:7b)
+[chat]
+enabled = true
+ollama_url = "http://localhost:11434"
+model = "qwen2.5:7b"
+max_context_tokens = 6144
+max_history_messages = 20
+temperature = 0.5
+```
+
+```toml Lightweight (qwen2.5:3b)
+[chat]
+enabled = true
+ollama_url = "http://localhost:11434"
+model = "qwen2.5:3b"
+max_context_tokens = 4096
+max_history_messages = 15
+temperature = 0.5
+```
+
+```toml High-Quality (phi3:14b)
+[chat]
+enabled = true
+ollama_url = "http://localhost:11434"
+model = "phi3:14b"
+max_context_tokens = 8192
+max_history_messages = 30
+temperature = 0.3
+```
+</CodeGroup>
+
+## Ollama Auto-Detection
+
+### How Auto-Detection Works
+
+From `architecture.md:232`:
+
+```
+Daemon Startup Sequence:
+1. Load config, ensure directories
+2. Check tesseract availability
+3. Open database, run migrations
+4. Ollama auto-detection:
+   a. Health check: GET {ollama_url}/api/tags
+   b. Check if embedding model exists
+   c. If missing: Pull via POST {ollama_url}/api/pull (10-minute timeout)
+   d. If successful: Enable semantic search
+5. Spawn background backfill (batch 50, 50ms delay)
+6. Start capture pipeline
+7. Register D-Bus service
+8. Wait for shutdown signal
+```
+
+<Info>
+**Graceful Degradation**: If Ollama is unreachable, RewindOS continues with keyword-only search. No errors, no crashes.
+</Info>
+
+### Verify Auto-Detection
+
+Check daemon logs after startup:
+
+```bash
+journalctl --user -u rewindos-daemon -n 50 | grep -i ollama
+```
+
+Expected output:
+
+```
+[INFO] Probing Ollama at http://localhost:11434
+[INFO] Ollama health check: OK
+[INFO] Checking embedding model: nomic-embed-text
+[INFO] Model found, skipping pull
+[INFO] Checking chat model: qwen2.5:7b
+[INFO] Model found, skipping pull
+[INFO] Semantic search enabled
+[INFO] Starting background embedding backfill
+[INFO] Backfill progress: 0/1234 screenshots embedded
+```
+
+If Ollama is not running:
+
+```
+[WARN] Ollama health check failed: connection refused
+[INFO] Semantic search disabled, using keyword-only mode
+```
+
+## Backfill Embeddings
+
+### What is Backfill?
+
+When you enable semantic search on an existing RewindOS installation, you need to generate embeddings for all past screenshots. This process is called **backfilling**.
+
+### Automatic Backfill
+
+The daemon automatically backfills on startup if:
+
+1. Semantic search is enabled
+2. There are screenshots without embeddings
+
+From the logs:
+
+```
+[INFO] Starting background embedding backfill
+[INFO] Found 1234 screenshots without embeddings
+[INFO] Backfill progress: 50/1234 (4%)
+[INFO] Backfill progress: 100/1234 (8%)
+...
+[INFO] Backfill complete: 1234 screenshots embedded
+```
+
+**Performance:**
+- Batch size: 50 screenshots at a time
+- Delay: 50ms between embeddings
+- Rate: ~20 screenshots/second
+- 1000 screenshots ≈ 50 seconds
+
+### Manual Backfill
+
+Force a manual backfill:
+
+```bash
+cargo run -p rewindos-daemon -- backfill
+```
+
+Or from the UI: **Settings → Semantic Search → Backfill Embeddings**
+
+### Backfill Progress
+
+Check backfill status:
+
+```sql
+sqlite3 ~/.rewindos/rewindos.db \
+  "SELECT COUNT(*) AS total, 
+          SUM(CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END) AS embedded 
+   FROM screenshots;"
+```
+
+Expected output:
+
+```
+total|embedded
+1234|1234
+```
+
+### Re-Embedding After Model Change
+
+If you change the embedding model, you must re-embed all screenshots:
+
+```sql
+-- Clear existing embeddings
+sqlite3 ~/.rewindos/rewindos.db \
+  "UPDATE screenshots SET embedding = NULL;"
+```
+
+Then restart the daemon to trigger automatic backfill:
+
+```bash
+systemctl --user restart rewindos-daemon
+```
+
+<Warning>
+Re-embedding 10,000 screenshots can take 8-10 minutes. The daemon remains functional during backfill.
+</Warning>
+
+## Hybrid Search Architecture
+
+### How Hybrid Search Works
+
+When semantic search is enabled, RewindOS uses **Reciprocal Rank Fusion (RRF)** to combine keyword and vector search:
+
+```
+1. FTS5 Keyword Search → up to 300 results
+   - MATCH query against OCR text
+   - Ranked by BM25 relevance
+
+2. sqlite-vec KNN Vector Search → up to 300 results
+   - Embed query with Ollama
+   - Find nearest neighbors (cosine distance)
+   - Ranked by similarity score
+
+3. Reciprocal Rank Fusion (k=60)
+   - For each result in both lists:
+     score = 1 / (60 + rank + 1)
+   - Sum scores from both lists
+   - Sort by combined score descending
+
+4. Scene Deduplication
+   - Group near-duplicates by perceptual hash
+   - Hamming distance ≤ 5
+
+5. Paginate
+   - Return top N results
+```
+
+From `db.rs` in `rewindos-core`:
+
+```rust
+pub fn hybrid_search(
+    &self,
+    query: &str,
+    limit: usize,
+    offset: usize,
+) -> Result<SearchResponse> {
+    // 1. Embed query
+    let query_embedding = self.ollama_client.embed(query)?;
+    
+    // 2. FTS5 keyword search
+    let keyword_results = self.fts_search(query, 300)?;
+    
+    // 3. Vector KNN search
+    let vector_results = self.vector_search(&query_embedding, 300)?;
+    
+    // 4. RRF fusion
+    let fused_results = reciprocal_rank_fusion(
+        &keyword_results,
+        &vector_results,
+        60, // k parameter
+    );
+    
+    // 5. Scene dedup + paginate
+    let deduped = self.deduplicate_scenes(&fused_results, 5)?;
+    Ok(paginate(deduped, limit, offset))
+}
+```
+
+### When to Use Semantic vs Keyword
+
+<CardGroup cols={2}>
+  <Card title="Keyword Search" icon="keyboard">
+    **Best for:**
+    - Exact phrases ("error: 404")
+    - Code snippets (`fn main()`)
+    - URLs (github.com/user/repo)
+    - Error messages
+    - Proper nouns
+  </Card>
+  
+  <Card title="Semantic Search" icon="brain">
+    **Best for:**
+    - Conceptual queries ("bug in database code")
+    - Synonyms ("car" matches "vehicle")
+    - Paraphrases ("how to install" matches "installation guide")
+    - Vague memories ("screenshot with a blue button")
+  </Card>
+</CardGroup>
+
+### Search Mode Indicator
+
+The UI displays a badge showing which search mode is active:
+
+- **"AI Search"** - Hybrid mode (Ollama enabled)
+- **"Keyword"** - FTS5-only mode (Ollama unavailable)
+
+See `SemanticBadge.tsx` component.
+
+## Intent Detection (Chat)
+
+### How Intent Detection Works
+
+The chat system uses Ollama to detect user intent and determine whether to search screenshots or answer directly:
+
+```
+User: "What was I working on yesterday around 3pm?"
+         ↓
+    Intent Detection
+         ↓
+  intent = "search_screenshots"
+  query = "work yesterday 3pm"
+         ↓
+    Hybrid Search
+         ↓
+   [5 relevant screenshots]
+         ↓
+  Build context with OCR text
+         ↓
+    Ollama Chat Completion
+         ↓
+  "Based on your screenshots, you were debugging
+   the authentication flow in the user service."
+```
+
+From `chat.rs` in `rewindos-core`:
+
+```rust
+pub struct Intent {
+    pub intent_type: String,  // "search_screenshots" | "answer_directly"
+    pub query: Option<String>,
+    pub time_filter: Option<TimeFilter>,
+}
+
+pub fn detect_intent(&self, user_message: &str) -> Result<Intent> {
+    let prompt = format!(
+        "Detect intent: 'search_screenshots' if the user wants to find \
+         past screen activity, or 'answer_directly' if it's a general question.\n\n\
+         User: {}\n\nRespond in JSON: {{\"intent\": ..., \"query\": ..., \"time_filter\": ...}}",
+        user_message
+    );
+    
+    let response = self.ollama_client.chat(&prompt)?;
+    Ok(serde_json::from_str(&response)?)
+}
+```
+
+### Example Intent Detection
+
+| User Input | Detected Intent | Action |
+|------------|-----------------|--------|
+| "Show me code I wrote today" | `search_screenshots` | Search → build context → answer |
+| "What's the weather like?" | `answer_directly` | Answer without searching |
+| "When did I last open Slack?" | `search_screenshots` | Search for Slack windows → answer |
+| "Explain quantum computing" | `answer_directly` | Answer without screenshots |
+
+## Performance Tuning
+
+### Embedding Performance
+
+<Accordion title="Slow embedding generation">
+  - **GPU acceleration**: Ollama auto-detects NVIDIA/AMD GPUs
+  - Check GPU usage: `nvidia-smi` or `radeontop`
+  - Verify GPU support: `ollama list` should show "GPU"
+  - Switch to smaller model: `all-minilm` (384D) is 3x faster than `nomic-embed-text` (768D)
+</Accordion>
+
+<Accordion title="High CPU usage during backfill">
+  - Backfill is intentionally rate-limited (50ms delay)
+  - If still too aggressive, edit `daemon/src/main.rs` and increase delay
+  - Or run manual backfill during off-hours: `cargo run -p rewindos-daemon -- backfill`
+</Accordion>
+
+### Chat Performance
+
+<Accordion title="Slow chat responses">
+  - Use smaller model: `qwen2.5:3b` instead of `qwen2.5:7b`
+  - Reduce context size: `max_context_tokens = 4096`
+  - Reduce history: `max_history_messages = 10`
+  - Enable GPU acceleration (see above)
+</Accordion>
+
+<Accordion title="Chat using too much RAM">
+  | Model | RAM Usage |
+  |-------|----------|
+  | qwen2.5:3b | ~2 GB |
+  | qwen2.5:7b | ~5 GB |
+  | phi3:14b | ~9 GB |
+  | mistral:7b | ~5 GB |
+  
+  Lower RAM usage:
+  - Use `qwen2.5:3b` or `llama3.2:3b`
+  - Reduce `max_context_tokens`
+  - Disable chat: `chat.enabled = false`
+</Accordion>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Ollama not detected">
+    1. Check Ollama is running: `systemctl --user status ollama`
+    2. Test health endpoint: `curl http://localhost:11434/api/tags`
+    3. Check daemon logs: `tail -f ~/.rewindos/logs/daemon.log | grep -i ollama`
+    4. Verify `semantic.ollama_url` matches Ollama's listen address
+  </Accordion>
+  
+  <Accordion title="Model pull fails">
+    ```
+    [ERROR] Failed to pull model nomic-embed-text: timeout
+    ```
+    
+    **Solutions:**
+    - Check internet connection
+    - Pull manually: `ollama pull nomic-embed-text`
+    - Increase timeout in `embedding.rs` (default: 600 seconds)
+    - Use a different model: `ollama pull all-minilm && ollama pull qwen2.5:3b`
+  </Accordion>
+  
+  <Accordion title="Semantic search not returning results">
+    1. Verify embeddings exist: `sqlite3 ~/.rewindos/rewindos.db "SELECT COUNT(*) FROM screenshots WHERE embedding IS NOT NULL;"`
+    2. Check backfill completed: Look for `[INFO] Backfill complete` in logs
+    3. Force manual backfill: `cargo run -p rewindos-daemon -- backfill`
+    4. Test vector search directly:
+       ```sql
+       SELECT id, timestamp 
+       FROM screenshots 
+       WHERE embedding IS NOT NULL 
+       LIMIT 10;
+       ```
+  </Accordion>
+  
+  <Accordion title="Chat returns nonsensical answers">
+    1. Check model is loaded: `ollama list`
+    2. Verify sufficient RAM (see [Performance Tuning](#performance-tuning))
+    3. Test chat directly: `ollama run qwen2.5:7b "Hello"`
+    4. Reduce temperature: `temperature = 0.2` (more deterministic)
+    5. Increase context: `max_context_tokens = 8192`
+  </Accordion>
+  
+  <Accordion title="Embedding dimensions mismatch">
+    ```
+    [ERROR] Expected 768 dimensions, got 384
+    ```
+    
+    **Cause**: `semantic.embedding_dimensions` doesn't match model output.
+    
+    **Solution**: Update config to match model:
+    ```toml
+    [semantic]
+    model = "all-minilm"
+    embedding_dimensions = 384  # Match model output
+    ```
+    
+    Then re-embed: `UPDATE screenshots SET embedding = NULL;`
+  </Accordion>
+</AccordionGroup>
+
+## Model Recommendations
+
+### By Use Case
+
+<Tabs>
+  <Tab title="Balanced (Recommended)">
+    ```toml
+    [semantic]
+    model = "nomic-embed-text"  # 768D, 137M params
+    embedding_dimensions = 768
+    
+    [chat]
+    model = "qwen2.5:7b"  # 7B params, 5GB RAM
+    max_context_tokens = 6144
+    temperature = 0.5
+    ```
+  </Tab>
+  
+  <Tab title="Lightweight (Laptops)">
+    ```toml
+    [semantic]
+    model = "all-minilm"  # 384D, 22M params
+    embedding_dimensions = 384
+    
+    [chat]
+    model = "qwen2.5:3b"  # 3B params, 2GB RAM
+    max_context_tokens = 4096
+    temperature = 0.5
+    ```
+  </Tab>
+  
+  <Tab title="High Quality (Desktops)">
+    ```toml
+    [semantic]
+    model = "mxbai-embed-large"  # 1024D, 335M params
+    embedding_dimensions = 1024
+    
+    [chat]
+    model = "phi3:14b"  # 14B params, 9GB RAM
+    max_context_tokens = 8192
+    temperature = 0.3
+    ```
+  </Tab>
+</Tabs>
+
+### By Hardware
+
+| Hardware | Embedding Model | Chat Model | Total RAM |
+|----------|----------------|------------|----------|
+| 8GB RAM laptop | all-minilm | qwen2.5:3b | ~3 GB |
+| 16GB RAM laptop | nomic-embed-text | qwen2.5:7b | ~6 GB |
+| 32GB RAM desktop | mxbai-embed-large | phi3:14b | ~10 GB |
+| GPU (8GB VRAM) | mxbai-embed-large | qwen2.5:7b | ~2 GB system RAM |
+
+## Privacy & Security
+
+<CardGroup cols={2}>
+  <Card title="Local-Only Processing" icon="house">
+    All Ollama requests go to `localhost:11434`. No external network calls.
+  </Card>
+  
+  <Card title="No Telemetry" icon="shield-halved">
+    RewindOS and Ollama do not phone home. Your screenshots and embeddings never leave your machine.
+  </Card>
+  
+  <Card title="Open Source Models" icon="code">
+    All recommended models are open-source and auditable:
+    - nomic-embed-text: [GitHub](https://github.com/nomic-ai/nomic)
+    - qwen2.5: [ModelScope](https://modelscope.cn/models/Qwen/Qwen2.5-7B)
+  </Card>
+  
+  <Card title="Transparent Configuration" icon="file-lines">
+    All AI behavior is configured in plain-text TOML. No hidden API calls or black-box services.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Search Guide" icon="magnifying-glass" href="/usage/search">
+    Learn how to use semantic search effectively
+  </Card>
+  <Card title="Ask AI Guide" icon="comments" href="/usage/ask-ai">
+    Master the conversational chat interface
+  </Card>
+  <Card title="Capture Settings" icon="camera" href="/configuration/capture-settings">
+    Optimize capture intervals and quality
+  </Card>
+  <Card title="Privacy Controls" icon="lock" href="/configuration/privacy-controls">
+    Configure app and window exclusions
+  </Card>
+</CardGroup>

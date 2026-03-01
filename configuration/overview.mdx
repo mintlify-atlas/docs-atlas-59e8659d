@@ -1,0 +1,240 @@
+---
+title: "Configuration Overview"
+description: "Learn how to configure RewindOS using config.toml for capture, storage, privacy, and AI features"
+---
+
+## Configuration File Location
+
+RewindOS stores all configuration in a single TOML file:
+
+```
+~/.rewindos/config.toml
+```
+
+The configuration file is automatically created with sensible defaults when you first run RewindOS. All data stays local in the `~/.rewindos/` directory.
+
+## File System Layout
+
+```
+~/.rewindos/
+├── config.toml                    # User configuration
+├── rewindos.db                    # SQLite database (FTS5 + vector search)
+├── screenshots/
+│   └── YYYY-MM-DD/
+│       ├── {timestamp_ms}.webp    # Full screenshots (~50-100KB each)
+│       └── thumbs/
+│           └── {timestamp_ms}.webp  # 320px thumbnails (~5-10KB)
+└── logs/
+    └── daemon.log
+```
+
+## Configuration Structure
+
+The `config.toml` file is organized into logical sections:
+
+<Accordion title="[capture] - Screen capture settings">
+Controls how often screenshots are taken and deduplication behavior.
+- `interval_seconds` - Time between capture attempts (default: 5)
+- `change_threshold` - Perceptual hash difference threshold for dedup (default: 3)
+- `enabled` - Enable/disable capture (default: true)
+</Accordion>
+
+<Accordion title="[storage] - Data persistence settings">
+Manages where and how screenshots are stored.
+- `base_dir` - Data directory (default: "~/.rewindos")
+- `retention_days` - Auto-delete screenshots older than this (default: 90)
+- `screenshot_quality` - WebP quality 0-100 (default: 80)
+- `thumbnail_width` - Thumbnail width in pixels (default: 320)
+- `max_capture_width` - Maximum screenshot width (default: 1920)
+</Accordion>
+
+<Accordion title="[privacy] - Privacy controls">
+Exclude sensitive applications and windows from capture.
+- `excluded_apps` - List of app names/bundles to skip
+- `excluded_title_patterns` - Window title patterns to skip
+</Accordion>
+
+<Accordion title="[ocr] - Text extraction settings">
+Configure Tesseract OCR for text indexing.
+- `enabled` - Enable OCR processing (default: true)
+- `tesseract_lang` - Language code (default: "eng")
+- `max_workers` - Concurrent OCR workers (default: 2)
+</Accordion>
+
+<Accordion title="[ui] - User interface settings">
+Customize the RewindOS interface.
+- `global_hotkey` - Keyboard shortcut to open search (default: "Ctrl+Shift+Space")
+- `theme` - UI theme: "light", "dark", or "system" (default: "system")
+</Accordion>
+
+<Accordion title="[semantic] - AI-powered semantic search">
+Configure Ollama embeddings for semantic search.
+- `enabled` - Enable semantic search (auto-detected at runtime)
+- `ollama_url` - Ollama server URL (default: "http://localhost:11434")
+- `model` - Embedding model (default: "nomic-embed-text")
+- `embedding_dimensions` - Vector dimensions (default: 768)
+</Accordion>
+
+<Accordion title="[chat] - AI chat assistant">
+Configure the Ask AI chat feature.
+- `enabled` - Enable chat feature (default: true)
+- `ollama_url` - Ollama server URL (default: "http://localhost:11434")
+- `model` - Chat model (default: "qwen2.5:7b")
+- `max_context_tokens` - Maximum context size (default: 6144)
+- `max_history_messages` - Chat history limit (default: 20)
+- `temperature` - Response creativity 0.0-1.0 (default: 0.5)
+</Accordion>
+
+<Accordion title="[focus] - Pomodoro productivity timer">
+Configure focus sessions and distraction tracking.
+- `work_minutes` - Work session duration (default: 25)
+- `short_break_minutes` - Short break duration (default: 5)
+- `long_break_minutes` - Long break duration (default: 15)
+- `sessions_before_long_break` - Work sessions before long break (default: 4)
+- `daily_goal_minutes` - Daily productivity goal (default: 480)
+- `distraction_apps` - Apps to flag as distractions
+- `auto_start_breaks` - Auto-start break timers (default: true)
+- `auto_start_work` - Auto-start work timers (default: false)
+- `category_rules` - Custom app categorization rules
+</Accordion>
+
+## Default Configuration
+
+<CodeGroup>
+```toml config.toml
+[capture]
+interval_seconds = 5
+change_threshold = 3
+enabled = true
+
+[storage]
+base_dir = "~/.rewindos"
+retention_days = 90
+screenshot_quality = 80
+thumbnail_width = 320
+max_capture_width = 1920
+
+[privacy]
+excluded_apps = ["rewindos", "com.jay.rewindos", "keepassxc", "1password", "bitwarden", "gnome-keyring"]
+excluded_title_patterns = ["Private Browsing", "Incognito", "Lock Screen", "Screen Locker"]
+
+[ocr]
+enabled = true
+tesseract_lang = "eng"
+max_workers = 2
+
+[ui]
+global_hotkey = "Ctrl+Shift+Space"
+theme = "system"
+
+[semantic]
+enabled = false  # Auto-enabled if Ollama detected
+ollama_url = "http://localhost:11434"
+model = "nomic-embed-text"
+embedding_dimensions = 768
+
+[chat]
+enabled = true
+ollama_url = "http://localhost:11434"
+model = "qwen2.5:7b"
+max_context_tokens = 6144
+max_history_messages = 20
+temperature = 0.5
+
+[focus]
+work_minutes = 25
+short_break_minutes = 5
+long_break_minutes = 15
+sessions_before_long_break = 4
+daily_goal_minutes = 480
+distraction_apps = ["discord", "slack", "twitter", "reddit"]
+auto_start_breaks = true
+auto_start_work = false
+```
+</CodeGroup>
+
+## Editing Configuration
+
+<Steps>
+  <Step title="Open the config file">
+    Edit `~/.rewindos/config.toml` with your preferred text editor:
+    ```bash
+    nano ~/.rewindos/config.toml
+    ```
+  </Step>
+  
+  <Step title="Make your changes">
+    Modify any settings in the TOML file. All sections support `serde` defaults, so you can omit fields to use defaults.
+  </Step>
+  
+  <Step title="Restart the daemon">
+    Restart the RewindOS daemon to apply changes:
+    ```bash
+    systemctl --user restart rewindos-daemon
+    ```
+  </Step>
+</Steps>
+
+<Note>
+The daemon reads `config.toml` on startup using `AppConfig::load()`. Changes require a daemon restart to take effect.
+</Note>
+
+## Validation
+
+RewindOS validates configuration on load:
+
+- Invalid TOML syntax returns a parse error
+- Missing required fields use defaults from `impl Default`
+- Invalid paths are resolved using `resolve_tilde()` for `~` expansion
+- The daemon ensures all required directories exist via `ensure_dirs()`
+
+<Warning>
+If the config file is corrupted or unparseable, the daemon will fail to start. Check logs at `~/.rewindos/logs/daemon.log` for details.
+</Warning>
+
+## Environment Variables
+
+<ParamField path="RUST_LOG" type="string" default="info">
+  Control logging verbosity. Examples:
+  - `RUST_LOG=debug` - Verbose debug logs
+  - `RUST_LOG=rewindos_daemon=trace` - Trace-level logs for daemon only
+  - `RUST_LOG=rewindos_core::db=debug` - Debug database operations
+</ParamField>
+
+## Configuration Loading
+
+The configuration is loaded from `config.rs:206`:
+
+```rust
+/// Load config from ~/.rewindos/config.toml, creating defaults if missing.
+pub fn load() -> Result<Self> {
+    let base_dir = Self::default_base_dir()?;
+    let config_path = base_dir.join("config.toml");
+
+    if config_path.exists() {
+        let contents = fs::read_to_string(&config_path)?;
+        let config: AppConfig = toml::from_str(&contents)?;
+        Ok(config)
+    } else {
+        let config = AppConfig::default();
+        config.ensure_dirs()?;
+        let toml_str = toml::to_string_pretty(&config)?;
+        fs::write(&config_path, toml_str)?;
+        Ok(config)
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Capture Settings" icon="camera" href="/configuration/capture-settings">
+    Configure screen capture intervals and deduplication
+  </Card>
+  <Card title="Privacy Controls" icon="shield" href="/configuration/privacy-controls">
+    Exclude sensitive apps and windows from capture
+  </Card>
+  <Card title="AI Integration" icon="brain" href="/configuration/ai-integration">
+    Set up Ollama for semantic search and chat
+  </Card>
+</CardGroup>

@@ -1,0 +1,309 @@
+---
+title: Building RewindOS
+description: Build instructions, prerequisites, and development workflow for RewindOS
+---
+
+## Prerequisites
+
+RewindOS requires several system dependencies and development tools.
+
+### System Dependencies
+
+Install the required system packages:
+
+```bash
+sudo apt install \
+  libpipewire-0.3-dev \
+  tesseract-ocr tesseract-ocr-eng \
+  libclang-dev libsqlite3-dev \
+  libdbus-1-dev pkg-config build-essential
+```
+
+<Info>
+These dependencies are required for:
+- **libpipewire-0.3-dev**: Screen capture via PipeWire
+- **tesseract-ocr**: OCR text extraction
+- **libclang-dev**: Rust compilation with system bindings
+- **libsqlite3-dev**: Database operations
+- **libdbus-1-dev**: D-Bus IPC between daemon and UI
+</Info>
+
+### Development Tools
+
+<Steps>
+  <Step title="Install Rust">
+    Install Rust via rustup:
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+  </Step>
+  
+  <Step title="Install Bun">
+    Install Bun package manager for frontend development:
+    ```bash
+    curl -fsSL https://bun.sh/install | bash
+    ```
+  </Step>
+  
+  <Step title="Install Ollama (Optional)">
+    For AI-powered semantic search and chat features:
+    ```bash
+    curl -fsSL https://ollama.com/install.sh | sh
+    ```
+    
+    The daemon will automatically detect Ollama and pull required models on startup.
+  </Step>
+</Steps>
+
+## Building the Project
+
+RewindOS uses a Cargo workspace with multiple crates and a React frontend.
+
+### Quick Build
+
+Build all Rust crates:
+
+```bash
+cargo build --workspace
+```
+
+### Development Build
+
+For faster iteration during development:
+
+<CodeGroup>
+```bash Rust Crates
+# Build specific crate
+cargo build -p rewindos-core
+cargo build -p rewindos-daemon
+cargo build -p rewindos
+
+# Build with debug symbols
+cargo build --workspace
+```
+
+```bash Frontend
+# Install dependencies
+bun install
+
+# Run Tauri in dev mode (hot reload)
+bun run tauri dev
+```
+
+```bash Daemon Only
+# Run daemon directly (without systemd)
+cargo run -p rewindos-daemon
+
+# Run daemon with backfill
+cargo run -p rewindos-daemon -- backfill
+```
+</CodeGroup>
+
+### Production Build
+
+Create an optimized release build:
+
+```bash
+# Build UI app with optimizations
+bun run tauri build
+
+# Binaries will be in target/release/
+```
+
+<Warning>
+Release builds take significantly longer but produce much faster executables. Use `cargo build --release --workspace` for production deployments.
+</Warning>
+
+## Running Tests
+
+RewindOS includes comprehensive test coverage in the core library.
+
+### Unit Tests
+
+```bash
+# Run all core library tests
+cargo test -p rewindos-core
+
+# Run specific test module
+cargo test -p rewindos-core db::
+
+# Run with output
+cargo test -p rewindos-core -- --nocapture
+```
+
+### Integration Tests
+
+```bash
+# Test deduplication logic
+cargo test -p rewindos-core dedup
+
+# Test database operations
+cargo test -p rewindos-core db::tests
+```
+
+<Note>
+Tests include scene deduplication, hybrid search, perceptual hashing, and database operations.
+</Note>
+
+## Development Workflow
+
+### Local Development Setup
+
+<Steps>
+  <Step title="Clone and Build">
+    ```bash
+    git clone https://github.com/yourusername/rewindos.git
+    cd rewindos
+    cargo build --workspace
+    bun install
+    ```
+  </Step>
+  
+  <Step title="Start Development Server">
+    ```bash
+    # Terminal 1: Run daemon
+    cargo run -p rewindos-daemon
+    
+    # Terminal 2: Run UI with hot reload
+    bun run tauri dev
+    ```
+  </Step>
+  
+  <Step title="Make Changes">
+    Edit Rust code in `crates/` or React code in `src/`.
+    
+    - Rust changes require rebuild
+    - React changes hot-reload automatically
+  </Step>
+  
+  <Step title="Run Tests">
+    ```bash
+    cargo test -p rewindos-core
+    ```
+  </Step>
+</Steps>
+
+### Using Make Commands
+
+The project includes a Makefile for common tasks:
+
+<CodeGroup>
+```bash Development
+# Run UI in dev mode
+make dev
+
+# View daemon logs
+make logs
+```
+
+```bash Daemon Management
+# Install daemon as systemd service
+make install-daemon
+
+# Restart daemon
+make restart-daemon
+```
+
+```bash Installation
+# Full build and install
+make install
+
+# Build production binary
+make build
+
+# Run installed app
+make run
+```
+
+```bash Cleanup
+# Uninstall completely
+make uninstall
+```
+</CodeGroup>
+
+### Manual Daemon Control
+
+The daemon exposes a CLI for control:
+
+```bash
+# Check daemon status
+rewindos-daemon status
+
+# Pause/resume capture
+rewindos-daemon pause
+rewindos-daemon resume
+
+# Backfill embeddings
+rewindos-daemon backfill
+```
+
+## Debugging
+
+### Viewing Logs
+
+<CodeGroup>
+```bash Systemd Service
+# Follow daemon logs
+journalctl --user -u rewindos-daemon -f
+
+# View recent logs
+journalctl --user -u rewindos-daemon --since today
+```
+
+```bash Direct Execution
+# Run with debug logging
+RUST_LOG=debug cargo run -p rewindos-daemon
+
+# Filter specific modules
+RUST_LOG=rewindos_daemon::pipeline=trace cargo run -p rewindos-daemon
+```
+</CodeGroup>
+
+### Common Issues
+
+<Accordion title="PipeWire connection fails">
+  Ensure `xdg-desktop-portal` is running:
+  ```bash
+  systemctl --user status xdg-desktop-portal
+  ```
+  
+  Grant screen capture permission when prompted by your desktop environment.
+</Accordion>
+
+<Accordion title="Tesseract not found">
+  Verify Tesseract installation:
+  ```bash
+  tesseract --version
+  which tesseract
+  ```
+  
+  Install language data if missing:
+  ```bash
+  sudo apt install tesseract-ocr-eng
+  ```
+</Accordion>
+
+<Accordion title="Build fails with linking errors">
+  Ensure all system dependencies are installed:
+  ```bash
+  sudo apt install libpipewire-0.3-dev libdbus-1-dev libsqlite3-dev
+  ```
+  
+  Clear build cache and retry:
+  ```bash
+  cargo clean
+  cargo build --workspace
+  ```
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Project Structure" icon="folder-tree" href="/development/project-structure">
+    Learn about the codebase organization and key modules
+  </Card>
+  
+  <Card title="Contributing" icon="code-pull-request" href="/development/contributing">
+    Guidelines for contributing code, tests, and documentation
+  </Card>
+</CardGroup>

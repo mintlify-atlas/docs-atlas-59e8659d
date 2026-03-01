@@ -1,0 +1,360 @@
+---
+title: "Capture Settings"
+description: "Configure screen capture intervals, quality, retention, and deduplication behavior"
+---
+
+## Overview
+
+RewindOS captures your screen at regular intervals to build a searchable history. The `[capture]` and `[storage]` sections control how screenshots are taken, stored, and retained.
+
+## Capture Configuration
+
+### Basic Settings
+
+<ParamField path="capture.interval_seconds" type="integer" default="5">
+  Time in seconds between capture attempts. The daemon checks for screen changes at this interval.
+  
+  **Recommended values:**
+  - `3-5` seconds for detailed capture (higher storage usage)
+  - `10-15` seconds for balanced capture
+  - `30-60` seconds for lightweight capture
+  
+  ```toml
+  [capture]
+  interval_seconds = 5
+  ```
+</ParamField>
+
+<ParamField path="capture.change_threshold" type="integer" default="3">
+  Perceptual hash hamming distance threshold for deduplication. Screenshots with a hamming distance ≤ this value are considered duplicates and skipped.
+  
+  **How it works:**
+  - Each screenshot is hashed using an 8x8 gradient perceptual hash
+  - If the hamming distance to the previous hash is ≤ threshold, the frame is skipped
+  - Lower values = more sensitive to changes (more screenshots)
+  - Higher values = less sensitive (fewer screenshots, more dedup)
+  
+  **Recommended values:**
+  - `2-3` - Strict dedup (only save when content meaningfully changes)
+  - `4-6` - Moderate dedup (balance between detail and storage)
+  - `7-10` - Aggressive dedup (only major scene changes)
+  
+  ```toml
+  [capture]
+  change_threshold = 3
+  ```
+</ParamField>
+
+<ParamField path="capture.enabled" type="boolean" default="true">
+  Master switch to enable/disable screen capture. When false, the daemon runs but does not capture new screenshots.
+  
+  ```toml
+  [capture]
+  enabled = true
+  ```
+</ParamField>
+
+### Example Configuration
+
+<CodeGroup>
+```toml Default (Balanced)
+[capture]
+interval_seconds = 5
+change_threshold = 3
+enabled = true
+```
+
+```toml Detailed Capture
+[capture]
+interval_seconds = 3
+change_threshold = 2
+enabled = true
+```
+
+```toml Lightweight Capture
+[capture]
+interval_seconds = 15
+change_threshold = 5
+enabled = true
+```
+</CodeGroup>
+
+## Storage Configuration
+
+### Data Directory
+
+<ParamField path="storage.base_dir" type="string" default="~/.rewindos">
+  Base directory for all RewindOS data. Supports `~` for home directory expansion.
+  
+  The daemon automatically creates:
+  - `{base_dir}/config.toml` - Configuration file
+  - `{base_dir}/rewindos.db` - SQLite database
+  - `{base_dir}/screenshots/` - Screenshot storage
+  - `{base_dir}/logs/` - Daemon logs
+  
+  ```toml
+  [storage]
+  base_dir = "~/.rewindos"
+  ```
+  
+  <Tip>
+  You can move RewindOS data to a different location (e.g., external drive) by changing `base_dir` and copying the existing directory.
+  </Tip>
+</ParamField>
+
+### Retention and Cleanup
+
+<ParamField path="storage.retention_days" type="integer" default="90">
+  Automatically delete screenshots older than this many days. Set to `0` to disable automatic cleanup.
+  
+  **Storage estimation (1920x1080 screen):**
+  - 5-second interval: ~10-12 screenshots/minute
+  - ~600-720 screenshots/hour
+  - ~4800-5760 screenshots/8-hour workday
+  - At 80KB/screenshot: ~384-460 MB/day
+  - 90 days: ~35-40 GB total
+  
+  ```toml
+  [storage]
+  retention_days = 90
+  ```
+  
+  <Warning>
+  Retention cleanup runs periodically in the background. Deleted screenshots cannot be recovered.
+  </Warning>
+</ParamField>
+
+### Image Quality
+
+<ParamField path="storage.screenshot_quality" type="integer" default="80">
+  WebP compression quality (0-100). Higher values = better quality but larger files.
+  
+  **Quality guidelines:**
+  - `60-70` - Acceptable for text, some compression artifacts
+  - `75-85` - Good balance of quality and size (recommended)
+  - `90-95` - High quality, larger files
+  - `100` - Lossless (not recommended, 3-5x larger)
+  
+  **File size comparison (1920x1080 screenshot):**
+  - Quality 60: ~40-50 KB
+  - Quality 80: ~70-90 KB
+  - Quality 95: ~150-200 KB
+  - Quality 100: ~300-500 KB
+  
+  ```toml
+  [storage]
+  screenshot_quality = 80
+  ```
+</ParamField>
+
+<ParamField path="storage.thumbnail_width" type="integer" default="320">
+  Width in pixels for thumbnail generation. Thumbnails are used in the UI grid view for faster loading.
+  
+  Aspect ratio is preserved. Typical thumbnail sizes:
+  - 320px wide: ~5-8 KB per thumbnail
+  - 480px wide: ~10-15 KB per thumbnail
+  
+  ```toml
+  [storage]
+  thumbnail_width = 320
+  ```
+</ParamField>
+
+<ParamField path="storage.max_capture_width" type="integer" default="1920">
+  Maximum width for captured screenshots. Screens wider than this are downscaled to save space.
+  
+  ```toml
+  [storage]
+  max_capture_width = 1920
+  ```
+  
+  <Info>
+  4K/ultrawide users can increase this to `2560` or `3840`, but expect proportionally larger file sizes.
+  </Info>
+</ParamField>
+
+### Complete Storage Example
+
+<CodeGroup>
+```toml Default Storage
+[storage]
+base_dir = "~/.rewindos"
+retention_days = 90
+screenshot_quality = 80
+thumbnail_width = 320
+max_capture_width = 1920
+```
+
+```toml High Quality (More Storage)
+[storage]
+base_dir = "~/.rewindos"
+retention_days = 180
+screenshot_quality = 90
+thumbnail_width = 480
+max_capture_width = 2560
+```
+
+```toml Minimal Storage
+[storage]
+base_dir = "~/.rewindos"
+retention_days = 30
+screenshot_quality = 65
+thumbnail_width = 240
+max_capture_width = 1280
+```
+</CodeGroup>
+
+## Deduplication Details
+
+### How Perceptual Hashing Works
+
+RewindOS uses the `image-hasher` crate with gradient hash algorithm:
+
+1. Capture frame from PipeWire
+2. Compute 8x8 gradient perceptual hash (64-bit)
+3. Compare hamming distance to previous hash
+4. If distance ≤ `change_threshold`: skip frame (duplicate)
+5. If distance > `change_threshold`: save screenshot
+
+From `hasher.rs`:
+
+```rust
+pub fn compute_hash(img: &DynamicImage) -> u64 {
+    let hasher = HasherConfig::new()
+        .hash_alg(HashAlg::Gradient)
+        .hash_size(8, 8)
+        .to_hasher();
+    let hash = hasher.hash_image(img);
+    hash_to_u64(&hash)
+}
+
+pub fn hamming_distance(a: u64, b: u64) -> u32 {
+    (a ^ b).count_ones()
+}
+```
+
+### Deduplication Pipeline
+
+The capture pipeline (`docs/capture-pipeline.md`) processes frames through multiple stages:
+
+```
+CaptureTask → HashTask → OcrTask → IndexTask
+            (dedup filter)
+```
+
+The `HashTask` compares each frame's hash to the previous one:
+
+```rust
+let distance = hamming_distance(current_hash, last_hash);
+if distance <= config.capture.change_threshold {
+    // Skip duplicate frame
+    continue;
+}
+// Forward to OCR stage
+```
+
+<Note>
+Deduplication happens **before** OCR and database insertion, saving CPU and storage for truly unique frames.
+</Note>
+
+## Monitoring Capture
+
+### Check Capture Status
+
+Use the D-Bus interface to check if capture is active:
+
+```bash
+dbus-send --session --print-reply \
+  --dest=com.rewindos.Daemon \
+  /com/rewindos/Daemon \
+  com.rewindos.Daemon.GetStatus
+```
+
+### View Capture Statistics
+
+The Dashboard view in the UI shows:
+- Total screenshots captured
+- Screenshots per day/hour
+- Storage usage
+- Deduplication efficiency
+
+### Daemon Logs
+
+Check capture logs for errors or warnings:
+
+```bash
+tail -f ~/.rewindos/logs/daemon.log
+```
+
+Look for:
+- `[CAPTURE]` - Capture stage events
+- `[HASH]` - Deduplication decisions
+- `[OCR]` - Text extraction progress
+- `[INDEX]` - Database insertion
+
+## Performance Tuning
+
+### CPU Usage
+
+<Accordion title="Reduce CPU load">
+  - Increase `interval_seconds` (e.g., 10-15s)
+  - Reduce `ocr.max_workers` (default: 2)
+  - Increase `change_threshold` (more aggressive dedup)
+</Accordion>
+
+### Storage Usage
+
+<Accordion title="Reduce disk space">
+  - Lower `screenshot_quality` (e.g., 65-70)
+  - Reduce `retention_days` (e.g., 30-60)
+  - Increase `max_capture_width` limit (downsample high-res screens)
+  - Increase `change_threshold` (fewer screenshots)
+</Accordion>
+
+### Battery Life (Laptops)
+
+<Accordion title="Optimize for battery">
+  - Increase `interval_seconds` to 15-30s
+  - Reduce `screenshot_quality` to 70
+  - Consider disabling `ocr.enabled` (search still works, but no text indexing)
+  - Disable `semantic.enabled` (Ollama is CPU-intensive)
+</Accordion>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No screenshots are being captured">
+    1. Check if capture is enabled: `capture.enabled = true`
+    2. Verify daemon is running: `systemctl --user status rewindos-daemon`
+    3. Check logs for PipeWire connection errors
+    4. Ensure xdg-desktop-portal is installed and running
+  </Accordion>
+  
+  <Accordion title="Too many duplicate screenshots">
+    - Increase `change_threshold` (e.g., 4-6)
+    - This will make deduplication more aggressive
+  </Accordion>
+  
+  <Accordion title="Missing important screen changes">
+    - Decrease `change_threshold` (e.g., 2-3)
+    - Decrease `interval_seconds` (e.g., 3-5s)
+  </Accordion>
+  
+  <Accordion title="Storage filling up too fast">
+    - Reduce `retention_days`
+    - Lower `screenshot_quality`
+    - Increase `change_threshold` (more dedup)
+    - Manually delete old screenshots: `rm -rf ~/.rewindos/screenshots/2024-*`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Privacy Controls" icon="shield" href="/configuration/privacy-controls">
+    Exclude sensitive apps and windows from capture
+  </Card>
+  <Card title="AI Integration" icon="brain" href="/configuration/ai-integration">
+    Enable semantic search with Ollama
+  </Card>
+</CardGroup>

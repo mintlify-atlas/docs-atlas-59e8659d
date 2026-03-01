@@ -1,0 +1,333 @@
+---
+title: Project Structure
+description: Understanding the RewindOS codebase layout, module organization, and architecture
+---
+
+## Cargo Workspace Layout
+
+RewindOS is organized as a Cargo workspace with three main crates:
+
+```
+rewindos/
+├── Cargo.toml                  # Workspace root
+├── crates/
+│   ├── rewindos-core/          # Shared library
+│   ├── rewindos-daemon/        # Capture daemon
+│   └── ...
+├── src-tauri/                  # Tauri UI app
+├── src/                        # React frontend
+├── docs/                       # Documentation
+└── systemd/                    # Service files
+```
+
+<Info>
+The workspace uses Rust 2021 edition with resolver = "2" for unified dependency resolution.
+</Info>
+
+## Core Crates
+
+### rewindos-core
+
+The shared library that both the daemon and UI depend on.
+
+```
+crates/rewindos-core/
+├── Cargo.toml
+├── migrations/
+│   ├── V001__initial_schema.sql
+│   └── V002__vector_embeddings.sql
+└── src/
+    ├── lib.rs
+    ├── db.rs           # Database operations
+    ├── schema.rs       # Types and models
+    ├── ocr.rs          # Tesseract wrapper
+    ├── hasher.rs       # Perceptual hashing
+    ├── config.rs       # Configuration
+    ├── embedding.rs    # Ollama embeddings
+    ├── chat.rs         # AI chat client
+    └── error.rs        # Error types
+```
+
+<Accordion title="Key Modules">
+  **db.rs** - SQLite + FTS5 + vector search
+  - Database initialization and migrations
+  - Keyword search (FTS5 MATCH)
+  - Vector search (sqlite-vec KNN)
+  - Hybrid search with Reciprocal Rank Fusion (RRF, k=60)
+  - Scene deduplication via perceptual hash grouping
+  
+  **schema.rs** - All shared types
+  - `Screenshot` - Core screenshot metadata
+  - `SearchResult` - Search hit with highlighting
+  - `SearchResponse` - Paginated results with dedup info
+  - All types are serde-serializable for IPC
+  
+  **embedding.rs** - OllamaClient
+  - Health check and model detection
+  - Automatic model pulling
+  - Batch embedding generation
+  - Graceful fallback when unavailable
+  
+  **chat.rs** - OllamaChatClient
+  - Intent detection (search vs conversation)
+  - Streaming chat responses
+  - Screenshot context building
+  - Conversation history management
+  
+  **hasher.rs** - Perceptual hashing
+  - Gradient hash (8x8 via image-hasher)
+  - Hamming distance calculation
+  - WebP encoding for screenshots
+  - Thumbnail generation (320px wide)
+  
+  **ocr.rs** - Tesseract wrapper
+  - Spawns `tesseract` CLI subprocess
+  - TSV output parsing
+  - Error handling for failed OCR
+  
+  **config.rs** - Configuration loading
+  - Loads from `~/.rewindos/config.toml`
+  - Sections: capture, storage, privacy, semantic, chat, focus
+  - Validation and defaults
+</Accordion>
+
+**Key Dependencies:**
+- `rusqlite` (bundled + fts5 features)
+- `sqlite-vec` (vector search extension)
+- `image` + `image-hasher`
+- `refinery` (migrations)
+- `reqwest` (Ollama HTTP client)
+- `tokio` (async runtime)
+
+### rewindos-daemon
+
+Systemd user service that captures and processes screenshots.
+
+```
+crates/rewindos-daemon/
+├── Cargo.toml
+└── src/
+    ├── main.rs         # Entry point, D-Bus server
+    ├── pipeline.rs     # Tokio channel orchestration
+    ├── service.rs      # D-Bus service implementation
+    ├── detect.rs       # Desktop environment detection
+    ├── capture/        # PipeWire capture backend
+    │   ├── mod.rs
+    │   ├── portal.rs   # xdg-desktop-portal client
+    │   └── stream.rs   # PipeWire stream handling
+    └── window_info/    # Active window metadata
+        ├── mod.rs
+        ├── wlr.rs      # wlr-foreign-toplevel protocol
+        ├── kwin.rs     # KWin D-Bus interface
+        └── x11.rs      # X11 fallback
+```
+
+<Steps>
+  <Step title="Daemon Startup">
+    1. Load config from `~/.rewindos/config.toml`
+    2. Ensure directories exist
+    3. Check Tesseract availability
+    4. Open database and run migrations
+  </Step>
+  
+  <Step title="Ollama Auto-Detection">
+    5. Probe Ollama health endpoint
+    6. Check if embedding model exists
+    7. Pull model if missing (10-minute timeout)
+    8. Enable semantic search if successful
+  </Step>
+  
+  <Step title="Pipeline Initialization">
+    9. Start 4-stage tokio pipeline (capture → hash → OCR → index)
+    10. Spawn background embedding backfill
+    11. Register D-Bus service `com.rewindos.Daemon`
+  </Step>
+  
+  <Step title="Runtime">
+    12. Start window info provider (Wayland/KWin/X11 fallback)
+    13. Wait for SIGTERM/SIGINT for graceful shutdown
+  </Step>
+</Steps>
+
+**Pipeline Architecture:**
+
+```
+          mpsc            mpsc             mpsc
+Capture ──────────► Hash ──────────► OCR ──────────► Index
+(PipeWire)      (dedup filter)  (Tesseract)    (SQLite write)
+```
+
+Each stage is an independent tokio task communicating via bounded channels.
+
+### src-tauri
+
+Tauri desktop application providing the search UI.
+
+```
+src-tauri/
+├── Cargo.toml
+├── tauri.conf.json
+└── src/
+    └── lib.rs          # Tauri commands + D-Bus client
+```
+
+**Key Tauri Commands:**
+- `search` - Full-text and semantic search
+- `get_screenshot` - Fetch screenshot details
+- `get_timeline` - Chronological history
+- `get_stats` - Dashboard analytics
+- `chat` - AI conversation with streaming
+- `update_config` - Settings management
+
+Communicates with daemon via D-Bus IPC.
+
+## Frontend Structure
+
+React application built with Tauri.
+
+```
+src/
+├── main.tsx
+├── App.tsx
+├── components/
+│   ├── SearchBar.tsx           # Search input with filters
+│   ├── SearchResults.tsx       # Result container
+│   ├── SearchResultGrid.tsx    # Grid view with dedup badges
+│   ├── SearchResultCard.tsx    # List view
+│   ├── SemanticBadge.tsx       # AI/keyword mode indicator
+│   ├── ScreenshotDetail.tsx    # Full screenshot viewer
+│   ├── HistoryView.tsx         # Timeline browser
+│   ├── TimelineView.tsx        # Visual timeline
+│   ├── DashboardView.tsx       # Analytics dashboard
+│   ├── AskView.tsx             # AI chat interface
+│   ├── ChatMessage.tsx         # Chat message component
+│   ├── FocusView.tsx           # Pomodoro timer
+│   ├── SettingsView.tsx        # Configuration UI
+│   └── Sidebar.tsx             # Navigation
+└── lib/
+    ├── api.ts                  # Tauri invoke wrappers
+    └── format.ts               # Utility functions
+```
+
+**Tech Stack:**
+- React 19 + TypeScript
+- shadcn/ui + Tailwind CSS
+- TanStack Query (data caching)
+- Tauri IPC (Rust bridge)
+
+**Views:**
+1. **Search** - Full-text + semantic search with scene dedup
+2. **History** - Chronological screenshot browser
+3. **Dashboard** - App usage analytics and charts
+4. **Ask** - AI chat with screenshot context
+5. **Focus** - Pomodoro timer with productivity tracking
+6. **Settings** - Full configuration interface
+
+## Documentation Structure
+
+```
+docs/
+├── architecture.md         # System architecture
+├── database-schema.md      # SQLite schema + queries
+├── dbus-api.md            # D-Bus interface contract
+├── capture-pipeline.md    # Pipeline deep dive
+└── frontend-spec.md       # UI components and layout
+```
+
+<Note>
+These technical docs provide in-depth details on implementation. Start with `architecture.md` for system overview.
+</Note>
+
+## Data Storage Layout
+
+All data is stored in `~/.rewindos/`:
+
+```
+~/.rewindos/
+├── config.toml                    # User configuration
+├── rewindos.db                    # SQLite (FTS5 + sqlite-vec)
+├── screenshots/
+│   └── YYYY-MM-DD/
+│       ├── {timestamp_ms}.webp    # Full screenshots (~50-100KB)
+│       └── thumbs/
+│           └── {timestamp_ms}.webp  # Thumbnails (~5-10KB)
+└── logs/
+    └── daemon.log
+```
+
+<Warning>
+The database uses WAL mode for crash safety. Never modify `rewindos.db` directly while the daemon is running.
+</Warning>
+
+## Module Dependencies
+
+### Workspace Dependencies
+
+Shared dependencies defined in workspace `Cargo.toml`:
+
+```toml
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+anyhow = "1"
+rewindos-core = { path = "crates/rewindos-core" }
+```
+
+### Critical Features
+
+<Accordion title="rusqlite bundled + fts5">
+  Bundles SQLite library and enables FTS5 full-text search. Required for keyword search functionality.
+</Accordion>
+
+<Accordion title="tokio full">
+  Enables all tokio features including multi-threaded runtime, channels, timers, and filesystem I/O.
+</Accordion>
+
+<Accordion title="tracing env-filter">
+  Allows filtering logs via `RUST_LOG` environment variable for debugging.
+</Accordion>
+
+## Search Architecture
+
+Three-tier search system:
+
+### 1. Keyword Search (FTS5)
+
+Implemented in `rewindos-core/src/db.rs`:
+- FTS5 MATCH query with snippet highlighting
+- Fast sub-100ms queries
+- Always available (no dependencies)
+
+### 2. Vector Search (sqlite-vec)
+
+- KNN search on 768-dimensional embeddings
+- Requires Ollama with `nomic-embed-text`
+- Enables semantic similarity matching
+
+### 3. Hybrid Search (RRF)
+
+- Combines FTS5 + vector search
+- Reciprocal Rank Fusion (k=60)
+- Post-search scene deduplication
+- Groups near-duplicates (hamming distance ≤ 5)
+
+<Info>
+Search mode is automatically selected based on Ollama availability. The daemon auto-detects and enables semantic features at runtime.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Building" icon="hammer" href="/development/building">
+    Build instructions and development workflow
+  </Card>
+  
+  <Card title="Contributing" icon="code-pull-request" href="/development/contributing">
+    How to contribute code and documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,390 @@
+---
+title: "Database Schema"
+description: "SQLite database schema with FTS5 full-text search, sqlite-vec vector search, and key queries"
+---
+
+## Overview
+
+Single SQLite database at `~/.rewindos/rewindos.db`.
+
+**SQLite Configuration:**
+- WAL journal mode (concurrent reads during writes)
+- FTS5 for full-text search
+- sqlite-vec for vector similarity search (KNN)
+- Managed via refinery migrations
+
+## PRAGMA Settings
+
+Applied on every connection:
+
+```sql
+PRAGMA journal_mode = WAL;
+PRAGMA synchronous = NORMAL;
+PRAGMA foreign_keys = ON;
+PRAGMA busy_timeout = 5000;
+PRAGMA cache_size = -20000;  -- 20MB cache
+```
+
+<Note>
+  WAL mode allows concurrent reads during writes, crucial for daemon + UI accessing the database simultaneously.
+</Note>
+
+## Tables
+
+### screenshots
+
+Primary table storing metadata for each captured frame.
+
+```sql
+CREATE TABLE screenshots (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp       INTEGER NOT NULL,        -- Unix timestamp (seconds)
+    timestamp_ms    INTEGER NOT NULL,        -- Unix timestamp (milliseconds)
+    app_name        TEXT,                     -- Process name (e.g., "firefox")
+    window_title    TEXT,                     -- Window title at capture time
+    window_class    TEXT,                     -- Window class/app_id
+    file_path       TEXT NOT NULL,            -- Path to WebP screenshot
+    thumbnail_path  TEXT,                     -- Path to thumbnail WebP
+    width           INTEGER NOT NULL,
+    height          INTEGER NOT NULL,
+    file_size_bytes INTEGER NOT NULL,
+    perceptual_hash BLOB NOT NULL,           -- 8-byte gradient hash
+    ocr_status      TEXT NOT NULL DEFAULT 'pending',
+    embedding_status TEXT NOT NULL DEFAULT 'pending',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_screenshots_timestamp ON screenshots(timestamp);
+CREATE INDEX idx_screenshots_app_name ON screenshots(app_name);
+CREATE INDEX idx_screenshots_window_class ON screenshots(window_class);
+CREATE INDEX idx_screenshots_ocr_status ON screenshots(ocr_status);
+CREATE INDEX idx_screenshots_hash ON screenshots(perceptual_hash);
+```
+
+<Accordion title="Field Details">
+  <Tabs>
+    <Tab title="Timestamps">
+      - `timestamp`: Unix seconds for date queries
+      - `timestamp_ms`: Millisecond precision for exact sorting
+    </Tab>
+    <Tab title="Window Info">
+      - `app_name`: Process name from window info provider
+      - `window_title`: Full window title for context
+      - `window_class`: X11/Wayland app_id for grouping
+    </Tab>
+    <Tab title="Status Flags">
+      - `ocr_status`: `pending` → `processing` → `done` | `failed`
+      - `embedding_status`: `pending` → `done` (V002 migration)
+    </Tab>
+    <Tab title="Hashing">
+      - `perceptual_hash`: 8-byte BLOB from image-hasher
+      - Used for deduplication (hamming distance)
+    </Tab>
+  </Tabs>
+</Accordion>
+
+### ocr_fts (FTS5 Virtual Table)
+
+Full-text search index for OCR-extracted text. Uses a standalone content design where `screenshot_id` is stored directly.
+
+```sql
+CREATE VIRTUAL TABLE ocr_fts USING fts5(
+    text_content,
+    screenshot_id UNINDEXED,
+    tokenize='unicode61 remove_diacritics 2'
+);
+```
+
+<Note>
+  The `UNINDEXED` keyword prevents FTS5 from indexing `screenshot_id` itself, only storing it for joins.
+</Note>
+
+### ocr_text_content
+
+Backing content table for OCR text (separate from FTS for flexibility).
+
+```sql
+CREATE TABLE ocr_text_content (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    screenshot_id   INTEGER NOT NULL REFERENCES screenshots(id) ON DELETE CASCADE,
+    text_content    TEXT NOT NULL,
+    word_count      INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(screenshot_id)
+);
+
+CREATE INDEX idx_ocr_screenshot ON ocr_text_content(screenshot_id);
+```
+
+### ocr_bounding_boxes
+
+Stores individual text regions with coordinates for click-to-copy.
+
+```sql
+CREATE TABLE ocr_bounding_boxes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    screenshot_id   INTEGER NOT NULL REFERENCES screenshots(id) ON DELETE CASCADE,
+    text_content    TEXT NOT NULL,
+    x               INTEGER NOT NULL,
+    y               INTEGER NOT NULL,
+    width           INTEGER NOT NULL,
+    height          INTEGER NOT NULL,
+    confidence      REAL                     -- Tesseract confidence (0-100)
+);
+
+CREATE INDEX idx_bbox_screenshot ON ocr_bounding_boxes(screenshot_id);
+```
+
+### ocr_embeddings (V002 — sqlite-vec)
+
+Vector embeddings for semantic search, using sqlite-vec's `vec0` module.
+
+```sql
+CREATE VIRTUAL TABLE IF NOT EXISTS ocr_embeddings USING vec0(
+    screenshot_id INTEGER PRIMARY KEY,
+    embedding float[768]
+);
+```
+
+<Accordion title="Vector Storage Details">
+  - Stores 768-dimensional float32 embeddings from `nomic-embed-text`
+  - Supports KNN nearest-neighbor search via `WHERE embedding MATCH ?`
+  - `screenshot_id` links back to `screenshots.id`
+  - `embedding_status` on `screenshots` tracks which rows have been embedded
+  - Storage per embedding: 768 × 4 bytes = ~3KB
+</Accordion>
+
+### daemon_state
+
+Persistent daemon state (survives restarts).
+
+```sql
+CREATE TABLE daemon_state (
+    key             TEXT PRIMARY KEY,
+    value           TEXT NOT NULL,
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+## Migrations
+
+Migrations are embedded in the binary and run automatically:
+
+```
+crates/rewindos-core/migrations/
+├── V001__initial_schema.sql     # Core tables + FTS5
+└── V002__vector_embeddings.sql  # embedding_status + vec0
+```
+
+<Note>
+  Migrations run on every database open (both daemon and Tauri app), ensuring schema is always up to date.
+</Note>
+
+**Location:** `crates/rewindos-core/src/db.rs:70`
+
+## Key Queries
+
+### Full-text search with filters and snippet highlighting
+
+```sql
+SELECT s.id, s.timestamp, s.app_name, s.window_title,
+       s.thumbnail_path, s.file_path,
+       snippet(ocr_fts, 0, '<mark>', '</mark>', '...', 32) AS matched_text,
+       rank
+FROM ocr_fts
+JOIN screenshots s ON s.id = ocr_fts.screenshot_id
+WHERE ocr_fts MATCH ?1
+  AND (?2 IS NULL OR s.timestamp >= ?2)
+  AND (?3 IS NULL OR s.timestamp <= ?3)
+  AND (?4 IS NULL OR s.app_name = ?4)
+ORDER BY rank
+LIMIT ?5 OFFSET ?6;
+```
+
+<Accordion title="Query Features">
+  - **`MATCH`**: FTS5 full-text query syntax (supports AND, OR, phrases)
+  - **`snippet()`**: Extracts matched text with `<mark>` tags, max 32 tokens
+  - **`rank`**: FTS5 BM25 relevance score (lower = better)
+  - **Time filters**: Optional `start_time` and `end_time` bounds
+  - **App filter**: Optional filter by `app_name`
+</Accordion>
+
+**Location:** `crates/rewindos-core/src/db.rs:415`
+
+### Vector KNN search (semantic)
+
+```sql
+SELECT screenshot_id, distance
+FROM ocr_embeddings
+WHERE embedding MATCH ?1   -- query embedding as blob
+ORDER BY distance
+LIMIT ?2;
+```
+
+<Note>
+  The `MATCH` operator in sqlite-vec performs KNN search, returning the closest `LIMIT` vectors by cosine distance.
+</Note>
+
+**Location:** `crates/rewindos-core/src/db.rs:765`
+
+### Batch fetch perceptual hashes (for scene dedup)
+
+```sql
+SELECT id, perceptual_hash
+FROM screenshots
+WHERE id IN (?, ?, ?, ...);
+```
+
+Used by the deduplication algorithm to fetch all hashes for a result set in a single query.
+
+**Location:** `crates/rewindos-core/src/db.rs:1010`
+
+### Pending embeddings (for backfill)
+
+```sql
+SELECT s.id, otc.text_content
+FROM screenshots s
+JOIN ocr_text_content otc ON otc.screenshot_id = s.id
+WHERE s.ocr_status = 'done'
+  AND s.embedding_status = 'pending'
+ORDER BY s.id
+LIMIT ?1;
+```
+
+Returns screenshots that have been OCR'd but not yet embedded, used by the background backfill task.
+
+**Location:** `crates/rewindos-core/src/db.rs:736`
+
+### Deduplication check (capture-time)
+
+```sql
+SELECT id, perceptual_hash
+FROM screenshots
+WHERE timestamp > ?1
+ORDER BY timestamp DESC
+LIMIT ?2;
+```
+
+Fetches recent hashes (last 30 seconds, up to 10) to compare against incoming frame. Hamming distance computed in Rust.
+
+**Location:** `crates/rewindos-core/src/db.rs:275`
+
+### Retention cleanup
+
+```sql
+-- Delete FTS5 entries first (standalone table, no cascade)
+DELETE FROM ocr_fts WHERE screenshot_id IN
+  (SELECT id FROM screenshots WHERE timestamp < ?1);
+
+-- Delete screenshots (cascades to ocr_text_content, ocr_bounding_boxes)
+DELETE FROM screenshots WHERE timestamp < ?1;
+```
+
+<Note>
+  Application code also deletes corresponding WebP files from disk after the SQL deletes.
+</Note>
+
+**Location:** `crates/rewindos-core/src/db.rs:300`
+
+## Activity Analytics Queries
+
+<Tabs>
+  <Tab title="App Usage">
+    ```sql
+    SELECT app_name, COUNT(*) as cnt
+    FROM screenshots
+    WHERE timestamp >= ?1 AND (?2 IS NULL OR timestamp < ?2)
+      AND app_name IS NOT NULL
+    GROUP BY app_name
+    ORDER BY cnt DESC;
+    ```
+    
+    Returns top apps by screenshot count with percentages.
+  </Tab>
+  <Tab title="Daily Activity">
+    ```sql
+    SELECT date(timestamp, 'unixepoch', 'localtime') as day,
+           COUNT(*) as cnt,
+           COUNT(DISTINCT app_name) as apps
+    FROM screenshots
+    WHERE timestamp >= ?1 AND (?2 IS NULL OR timestamp < ?2)
+    GROUP BY day
+    ORDER BY day;
+    ```
+    
+    Screenshot count + unique apps per day.
+  </Tab>
+  <Tab title="Hourly Distribution">
+    ```sql
+    SELECT CAST(strftime('%H', timestamp, 'unixepoch', 'localtime') AS INTEGER) as hr,
+           COUNT(*) as cnt
+    FROM screenshots
+    WHERE timestamp >= ?1 AND (?2 IS NULL OR timestamp < ?2)
+    GROUP BY hr
+    ORDER BY hr;
+    ```
+    
+    Screenshot count distribution across 24 hours.
+  </Tab>
+</Tabs>
+
+## Storage Estimation
+
+<Accordion title="Typical Database Size (90 days)">
+  **Assumptions:**
+  - 5s capture interval
+  - 90% deduplication rate
+  - 100 words average per screenshot
+  - Semantic search enabled
+  
+  **Storage breakdown:**
+  - Screenshots metadata: ~50 bytes × 155,520 rows = 8MB
+  - OCR text: ~500 bytes × 155,520 = 75MB
+  - FTS5 index: +40% overhead = 30MB
+  - sqlite-vec embeddings: 3KB × 155,520 = 450MB
+  - Bounding boxes: ~200 bytes × 15 boxes × 155,520 = 450MB
+  
+  **Total: ~1GB**
+  
+  WAL file can add 10-20% during heavy writes.
+</Accordion>
+
+## Database Performance
+
+### Index Strategy
+
+- **`idx_screenshots_timestamp`**: Range queries for browsing, retention
+- **`idx_screenshots_app_name`**: Filter by app
+- **`idx_screenshots_ocr_status`**: Find pending OCR work
+- **`idx_screenshots_hash`**: Deduplication lookups
+- **`idx_ocr_screenshot`**: OCR text joins
+- **`idx_bbox_screenshot`**: Bounding box lookups
+
+### Optimization Tips
+
+<Accordion title="Maintenance Commands">
+  ```sql
+  -- Optimize FTS5 index (run every 1000 inserts)
+  INSERT INTO ocr_fts(ocr_fts) VALUES('optimize');
+
+  -- Checkpoint WAL file (run after bulk deletes)
+  PRAGMA wal_checkpoint(TRUNCATE);
+
+  -- Analyze query planner statistics
+  ANALYZE;
+
+  -- Vacuum to reclaim space (run after large deletions)
+  VACUUM;
+  ```
+</Accordion>
+
+**Location:** `crates/rewindos-core/src/db.rs` (various methods)
+
+## Schema Evolution
+
+Future migrations can add:
+- Additional vector indices (e.g., image embeddings)
+- Tags or collections tables
+- User annotations
+- Journal entries
+
+All migrations are versioned and applied atomically via refinery.

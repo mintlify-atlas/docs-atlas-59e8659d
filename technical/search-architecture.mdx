@@ -1,0 +1,434 @@
+---
+title: "Search Architecture"
+description: "Hybrid search implementation with FTS5, sqlite-vec, Reciprocal Rank Fusion, and scene deduplication"
+---
+
+## Overview
+
+RewindOS supports three search modes:
+
+1. **Keyword-only**: FTS5 full-text search when Ollama is unavailable
+2. **Hybrid**: FTS5 + vector search with RRF fusion when Ollama is available
+3. **Auto-detection**: Daemon probes Ollama on startup and enables semantic transparently
+
+All search modes include **scene deduplication** to collapse near-duplicate screenshots.
+
+## Search Modes
+
+<Tabs>
+  <Tab title="Keyword-only">
+    ### When Active
+    - Ollama is not installed or not running
+    - Embedding model not available
+    - User has disabled semantic search
+    
+    ### Flow
+    ```mermaid
+    graph LR
+        A[Query] --> B[FTS5 MATCH]
+        B --> C[Scene Dedup]
+        C --> D[Paginate]
+        D --> E[Results]
+    ```
+    
+    ### Implementation
+    ```rust
+    pub fn search(&self, filters: &SearchFilters) -> Result<SearchResponse> {
+        // Count total matches
+        let total_count = self.search_count(filters)?;
+        
+        // Over-fetch for dedup (limit × 3, max 300)
+        let overfetch_limit = (filters.limit * 3).min(300);
+        
+        // FTS5 query with filters
+        let results = self.conn.query_map(
+            "SELECT ... FROM ocr_fts 
+             JOIN screenshots s ON s.id = ocr_fts.screenshot_id
+             WHERE ocr_fts MATCH ?1 AND ...
+             ORDER BY rank
+             LIMIT ?5 OFFSET 0",
+            params![filters.query, ...]
+        )?;
+        
+        // Scene dedup (hamming distance ≤ 5)
+        let deduped = self.deduplicate_results(results, 5)?;
+        
+        // Paginate the deduped set
+        let start = filters.offset as usize;
+        let end = (start + filters.limit as usize).min(deduped.len());
+        let paged = deduped[start..end].to_vec();
+        
+        Ok(SearchResponse {
+            results: paged,
+            total_count: deduped.len() as i64,
+            search_mode: Some("keyword".to_string()),
+        })
+    }
+    ```
+    
+    **Location:** `crates/rewindos-core/src/db.rs:390`
+  </Tab>
+  <Tab title="Hybrid">
+    ### When Active
+    - Ollama is running and reachable
+    - Embedding model is available (pulled on daemon startup)
+    - User has not disabled semantic search
+    
+    ### Flow
+    ```mermaid
+    graph TB
+        A[Query] --> B[Embed Query]
+        A --> C[FTS5 Search]
+        B --> D[Vector KNN]
+        C --> E[RRF Fusion]
+        D --> E
+        E --> F[Scene Dedup]
+        F --> G[Paginate]
+        G --> H[Results]
+    ```
+    
+    ### Reciprocal Rank Fusion (RRF)
+    
+    Combines two ranked lists into a single ranking:
+    
+    ```rust
+    const RRF_K: f64 = 60.0;
+    let mut scores: HashMap<i64, f64> = HashMap::new();
+    
+    // Score from FTS5 results
+    for (rank, result) in fts_results.iter().enumerate() {
+        scores[result.id] += 1.0 / (RRF_K + rank as f64 + 1.0);
+    }
+    
+    // Score from vector results
+    for (rank, (id, _dist)) in vec_results.iter().enumerate() {
+        scores[id] += 1.0 / (RRF_K + rank as f64 + 1.0);
+    }
+    
+    // Sort by combined score descending
+    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    ```
+    
+    <Accordion title="Why RRF?">
+      **Advantages over simple score fusion:**
+      - No need to normalize FTS5 BM25 scores and vector distances
+      - No hyperparameters for weighting (k=60 is standard)
+      - Proven effective in information retrieval research
+      - Handles cases where results appear in only one list
+      
+      **Formula:** `score = 1 / (k + rank + 1)`
+      
+      **Example:**
+      - Result appears at rank 0 in FTS5: `1/(60+0+1) = 0.0164`
+      - Same result at rank 5 in vector: `1/(60+5+1) = 0.0152`
+      - **Combined score: 0.0316** (higher than either alone)
+    </Accordion>
+    
+    **Location:** `crates/rewindos-core/src/db.rs:786`
+  </Tab>
+  <Tab title="Auto-detection">
+    ### Daemon Startup Sequence
+    
+    ```mermaid
+    sequenceDiagram
+        participant D as Daemon
+        participant O as Ollama
+        participant DB as Database
+        
+        D->>O: Health check (GET /api/tags)
+        alt Ollama reachable
+            O-->>D: 200 OK
+            D->>O: Check model exists
+            alt Model missing
+                D->>O: Pull model (POST /api/pull)
+                O-->>D: 200 OK (10min timeout)
+            end
+            D->>D: Enable semantic search
+            D->>DB: Spawn backfill task
+        else Ollama unavailable
+            O-->>D: Connection refused
+            D->>D: Continue with keyword-only
+        end
+    ```
+    
+    <Note>
+      No user intervention required. Semantic search is enabled automatically if Ollama is detected, and the system gracefully degrades to keyword-only if not.
+    </Note>
+    
+    **Location:** `crates/rewindos-daemon/src/main.rs` (startup)
+  </Tab>
+</Tabs>
+
+## Scene Deduplication
+
+Post-search grouping to collapse visually similar screenshots.
+
+### Algorithm
+
+```rust
+pub fn deduplicate_results(
+    &self,
+    results: Vec<SearchResult>,
+    threshold: u32,  // hamming distance threshold (default: 5)
+) -> Result<Vec<SearchResult>> {
+    // 1. Fetch all perceptual hashes for result IDs
+    let ids: Vec<i64> = results.iter().map(|r| r.id).collect();
+    let hash_map = self.get_hashes_for_ids(&ids)?;
+    
+    // 2. Greedy grouping
+    let mut groups: Vec<(usize, Vec<i64>)> = Vec::new();
+    
+    for (i, result) in results.iter().enumerate() {
+        let hash_a = hash_map.get(&result.id)?;
+        
+        let mut assigned = false;
+        for group in &mut groups {
+            let rep_id = results[group.0].id;
+            let hash_b = hash_map.get(&rep_id)?;
+            
+            if hamming_distance(hash_a, hash_b) <= threshold {
+                group.1.push(result.id);  // Add to existing group
+                assigned = true;
+                break;
+            }
+        }
+        
+        if !assigned {
+            groups.push((i, vec![result.id]));  // Start new group
+        }
+    }
+    
+    // 3. Build deduplicated results
+    let mut deduped = Vec::new();
+    for (rep_idx, member_ids) in groups {
+        let mut result = results[rep_idx].clone();
+        if member_ids.len() > 1 {
+            result.group_count = Some(member_ids.len() as i64);
+            result.group_screenshot_ids = Some(member_ids);
+        }
+        deduped.push(result);
+    }
+    
+    Ok(deduped)
+}
+```
+
+**Location:** `crates/rewindos-core/src/db.rs:1045`
+
+### Deduplication Strategy
+
+<Accordion title="Over-fetch → Dedup → Paginate">
+  **Problem:** If we paginate before deduplication, groups get split across pages.
+  
+  **Solution:**
+  1. **Over-fetch**: Request `limit × 3` results (max 300) from DB
+  2. **Deduplicate**: Group similar screenshots, keeping best-ranked representative
+  3. **Paginate**: Apply offset/limit to the deduplicated set
+  
+  **Example:**
+  - User requests page 1 (limit=20, offset=0)
+  - Fetch 60 results from FTS5
+  - Deduplicate → 25 unique groups
+  - Return groups 0-19 (20 results)
+  
+  **Trade-off:** Uses more memory but ensures complete groups on each page.
+</Accordion>
+
+### Hamming Distance Threshold
+
+**Default: 5 bits**
+
+| Threshold | Meaning |
+|-----------|----------|
+| 0 | Identical images only |
+| 1-3 | Nearly identical (cursor moved, minor UI change) |
+| 4-6 | Similar scene (small text change, scroll position) |
+| 7-10 | Related but different (same app, different content) |
+| 11+ | Completely different |
+
+<Note>
+  Threshold of 5 is a balance between aggressive deduplication (user sees variety) and not grouping unrelated screenshots.
+</Note>
+
+## Search Response Format
+
+```typescript
+interface SearchResponse {
+  results: SearchResult[];
+  total_count: number;
+  search_mode?: "keyword" | "hybrid";
+}
+
+interface SearchResult {
+  id: number;
+  timestamp: number;
+  app_name?: string;
+  window_title?: string;
+  thumbnail_path?: string;
+  file_path: string;
+  matched_text: string;  // Snippet with <mark> tags
+  rank: number;
+  // If part of a group:
+  group_count?: number;
+  group_screenshot_ids?: number[];
+}
+```
+
+<Accordion title="Group Badge Display">
+  **Frontend logic:**
+  ```tsx
+  {result.group_count && result.group_count > 1 && (
+    <Badge variant="secondary">
+      +{result.group_count - 1} similar
+    </Badge>
+  )}
+  ```
+  
+  **Clicking badge**: Expands group to show all `group_screenshot_ids` in a modal or inline.
+</Accordion>
+
+## FTS5 Query Syntax
+
+RewindOS uses SQLite FTS5 with unicode61 tokenizer:
+
+<Tabs>
+  <Tab title="Basic Queries">
+    ```sql
+    -- Single term
+    'docker'
+    
+    -- Multiple terms (implicit AND)
+    'docker compose'
+    
+    -- Explicit OR
+    'docker OR kubernetes'
+    
+    -- Phrase search
+    '"docker compose up"'
+    
+    -- Negation
+    'docker NOT swarm'
+    ```
+  </Tab>
+  <Tab title="Advanced Queries">
+    ```sql
+    -- Prefix matching
+    'kuber*'
+    
+    -- Column-specific (if multiple columns)
+    'text_content: docker'
+    
+    -- Near operator (within N tokens)
+    'NEAR(docker compose, 5)'
+    
+    -- Boolean combination
+    '(docker OR kubernetes) AND (deploy OR build)'
+    ```
+  </Tab>
+  <Tab title="Ranking">
+    FTS5 uses **BM25** ranking algorithm:
+    - Term frequency (TF): How often term appears in document
+    - Inverse document frequency (IDF): How rare the term is across all documents
+    - Document length normalization
+    
+    **Lower rank = better match** (SQLite convention)
+  </Tab>
+</Tabs>
+
+## Vector Embedding Details
+
+### Model: nomic-embed-text
+
+- **Dimensions**: 768
+- **Max tokens**: 8192 (way more than typical screenshot OCR)
+- **Distance metric**: Cosine similarity (via sqlite-vec)
+- **Embedding time**: 100-300ms per text (local Ollama)
+
+### Storage Format
+
+```rust
+// Convert f32 embedding to BLOB for SQLite
+let blob: Vec<u8> = embedding
+    .iter()
+    .flat_map(|f| f.to_le_bytes())
+    .collect();
+
+self.conn.execute(
+    "INSERT INTO ocr_embeddings (screenshot_id, embedding)
+     VALUES (?1, ?2)",
+    params![screenshot_id, blob],
+)?;
+```
+
+**Storage per embedding:** 768 × 4 bytes = 3,072 bytes (~3KB)
+
+### KNN Search Performance
+
+<Accordion title="sqlite-vec Implementation">
+  - Uses **HNSW** (Hierarchical Navigable Small World) index
+  - In-memory index built on first query
+  - Approximate KNN (trades accuracy for speed)
+  - Typical search: less than 50ms for 150K vectors
+  
+  **Query:**
+  ```sql
+  SELECT screenshot_id, distance
+  FROM ocr_embeddings
+  WHERE embedding MATCH ?1  -- query vector as blob
+  ORDER BY distance
+  LIMIT 300;
+  ```
+</Accordion>
+
+## Performance Optimization
+
+### Search Query Performance
+
+<Tabs>
+  <Tab title="Keyword">
+    **Typical latency:** 20-50ms
+    
+    **Bottlenecks:**
+    - FTS5 index size (grows with corpus)
+    - Snippet generation (32 tokens)
+    - Over-fetching (3× limit)
+    
+    **Optimizations:**
+    - Periodic FTS5 `optimize` (every 1000 inserts)
+    - Index on `timestamp`, `app_name` for filters
+  </Tab>
+  <Tab title="Hybrid">
+    **Typical latency:** 100-200ms
+    
+    **Breakdown:**
+    - Ollama embed query: 100-150ms
+    - FTS5 search: 20-50ms
+    - Vector KNN: 20-50ms
+    - RRF fusion: 5-10ms
+    - Deduplication: 10-20ms
+    
+    **Bottlenecks:**
+    - Query embedding (network + model inference)
+    - Hash batch fetch for dedup
+    
+    **Optimizations:**
+    - Run FTS5 and vector search in parallel (future)
+    - Cache query embeddings for repeated searches
+  </Tab>
+</Tabs>
+
+### Memory Usage
+
+- **FTS5 index**: Loaded on-demand by SQLite
+- **sqlite-vec HNSW**: Built in-memory on first query (~150MB for 150K vectors)
+- **Dedup hash map**: ~50KB per 1000 results
+
+## Future Enhancements
+
+<Accordion title="Planned Improvements">
+  1. **Multi-modal search**: Image embeddings + OCR embeddings for visual similarity
+  2. **Reranking**: Second-stage neural reranker for top-K results
+  3. **Query understanding**: Expand user query with synonyms, correct typos
+  4. **Personalization**: Learn from clicked results, boost relevant apps
+  5. **Federated search**: Search across multiple machines (encrypted)
+</Accordion>

@@ -1,0 +1,291 @@
+---
+title: History
+description: Browse and navigate your screen captures chronologically with timeline visualization and range selection
+---
+
+The History view lets you explore your screen captures over time without needing a search query. Browse by app usage or scrub through a visual timeline of your day.
+
+## View Modes
+
+History offers two complementary ways to explore your captures:
+
+<CardGroup cols={2}>
+  <Card title="Apps Mode" icon="window-restore">
+    Activity analytics with app usage breakdown, charts, and daily digest.
+  </Card>
+  <Card title="Timeline Mode" icon="clock">
+    Visual timeline showing screenshots grouped by hour and day.
+  </Card>
+</CardGroup>
+
+## Apps Mode
+
+Get insights into your app usage and activity patterns.
+
+### Overview Stats
+
+At the top of Apps mode, you'll see:
+
+<Steps>
+  <Step title="Screen Time">
+    Total active time (excludes idle periods and deduped screenshots).
+  </Step>
+  
+  <Step title="Total Captures">
+    Number of screenshots taken in the selected time range.
+  </Step>
+  
+  <Step title="Unique Apps">
+    How many different applications you used.
+  </Step>
+  
+  <Step title="Top App">
+    Your most-used application by time.
+  </Step>
+</Steps>
+
+### App Timeline
+
+A color-coded timeline shows your app activity throughout the day:
+
+- Each app gets a unique color for easy identification
+- Hover over segments to see app name and duration
+- Gaps indicate idle periods or paused capture
+- Click a segment to jump to that app in Timeline mode
+
+### Activity Charts
+
+<Tabs>
+  <Tab title="Hourly Activity">
+    Bar chart showing captures per hour:
+    - Identifies your peak productivity hours
+    - Shows activity distribution throughout the day
+    - Updates every 30 seconds
+  </Tab>
+  
+  <Tab title="App Usage Donut">
+    Proportional breakdown by application:
+    - Shows time percentage per app
+    - Hover for exact counts
+    - Click to filter Timeline mode by app
+  </Tab>
+  
+  <Tab title="Categories">
+    Groups apps by activity type:
+    - Work, Social, Entertainment, Development, etc.
+    - Configurable in Settings → Focus → Category Rules
+    - Helps identify distraction patterns
+  </Tab>
+</Tabs>
+
+### Daily Digest
+
+If Ollama is available, Apps mode shows an AI-generated daily summary:
+
+- Key highlights from your day
+- Major tasks and activities
+- Time spent in different contexts
+- Generated from screenshot metadata and OCR text
+
+<Note>
+Daily digest requires Ollama with the chat model configured (default: `qwen2.5:3b`).
+</Note>
+
+## Timeline Mode
+
+Browse screenshots chronologically with hour-by-hour organization.
+
+### Timeline Structure
+
+Screenshots are grouped hierarchically:
+
+```
+📅 Day Group (e.g., "Today", "Yesterday", "Mon Mar 1")
+  ├─ 🕐 Hour Group (e.g., "9:00 AM")
+  │   ├─ Screenshot 1
+  │   ├─ Screenshot 2
+  │   └─ Screenshot 3
+  ├─ 🕑 Hour Group (e.g., "10:00 AM")
+  │   └─ Screenshot 4
+  └─ ...
+```
+
+Each hour shows:
+- Number of captures in that hour
+- Expandable grid of thumbnails
+- App diversity indicator
+
+### Navigation
+
+<Steps>
+  <Step title="Select time range">
+    Use the preset buttons (Today, Yesterday, 7d, 30d) or pick a custom date with the calendar.
+  </Step>
+  
+  <Step title="Expand hour groups">
+    Click on an hour header to expand/collapse screenshots for that hour.
+  </Step>
+  
+  <Step title="View screenshot details">
+    Click any thumbnail to open the full screenshot with OCR text and metadata.
+  </Step>
+  
+  <Step title="Navigate between screenshots">
+    Use arrow keys or on-screen controls in detail view to move between captures.
+  </Step>
+</Steps>
+
+### Range Selection
+
+Select multiple screenshots to save as a collection:
+
+<Steps>
+  <Step title="Enable range select mode">
+    Click the **"Select Range"** button (crosshair icon).
+  </Step>
+  
+  <Step title="Choose start and end">
+    Click on two screenshots or hour groups to define the range.
+  </Step>
+  
+  <Step title="Review selection">
+    The toolbar shows how many screenshots are selected and the time span.
+  </Step>
+  
+  <Step title="Save as collection">
+    Click **"Save as Collection"** and give it a name.
+  </Step>
+</Steps>
+
+<Info>
+Collections are accessible from the Saved view. Perfect for grouping related work sessions or project milestones.
+</Info>
+
+## Time Range Presets
+
+Quick filters for common time ranges:
+
+| Preset | Range |
+|--------|-------|
+| **Today** | From midnight today to now |
+| **Yesterday** | Previous calendar day (00:00 to 23:59) |
+| **7d** | Last 7 days |
+| **30d** | Last 30 days |
+| **Custom** | Pick any specific date with the calendar |
+
+<Tip>
+Use the calendar picker to browse historical data beyond 30 days (up to your retention limit).
+</Tip>
+
+## Activity Tracking
+
+History view uses active time blocks to calculate accurate screen time:
+
+### Active Block Detection
+
+Active blocks are periods where:
+1. Screenshots are being captured
+2. Window changes or activity is detected
+3. Not marked as excluded (e.g., password managers)
+
+Idle gaps (no activity for >5 minutes) are excluded from screen time calculations.
+
+### App Time Estimation
+
+Per-app time is estimated using:
+- Screenshot timestamps
+- Window focus duration
+- Active block boundaries
+
+This gives a more accurate picture than raw capture count.
+
+<Note>
+Screen time excludes idle periods and screenshots from excluded apps (configured in Settings → Privacy).
+</Note>
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Review your workday">
+    Use Apps mode to see:
+    - When you were most productive
+    - How much time you spent in each tool
+    - Whether you met your daily focus goals
+  </Accordion>
+  
+  <Accordion title="Find a recent screenshot">
+    When you remember roughly when something happened:
+    1. Switch to Timeline mode
+    2. Select the appropriate time range
+    3. Expand the hour you think it was
+    4. Scan thumbnails visually
+  </Accordion>
+  
+  <Accordion title="Create project collections">
+    Save work sessions as collections:
+    1. Switch to Timeline mode
+    2. Enable range select
+    3. Select screenshots from a work session
+    4. Save with a descriptive name (e.g., "Client Meeting Prep")
+  </Accordion>
+  
+  <Accordion title="Identify distraction patterns">
+    Check Categories breakdown to see:
+    - How much time in Social apps
+    - When distractions occur (hourly chart)
+    - Which apps to add to Focus mode distraction list
+  </Accordion>
+</AccordionGroup>
+
+## Performance Notes
+
+- Timeline mode loads up to 2000 screenshots per request
+- Thumbnails are lazy-loaded as you scroll
+- Hour groups are collapsed by default to improve render performance
+- Activity data updates every 30 seconds via React Query
+
+## Keyboard Navigation
+
+| Shortcut | Action |
+|----------|--------|
+| `←` / `→` | Navigate between screenshots in detail view |
+| `Escape` | Close detail view |
+| `Space` | Toggle hour group expand/collapse |
+| `r` | Toggle range select mode |
+
+## Troubleshooting
+
+<Warning>
+**No captures showing?**
+- Check that the daemon is running: `systemctl --user status rewindos-daemon`
+- Verify capture is enabled in Settings → Capture
+- Look for errors in `~/.rewindos/logs/daemon.log`
+</Warning>
+
+<Warning>
+**Screen time seems incorrect?**
+- Active time excludes idle gaps (normal behavior)
+- Excluded apps don't count toward screen time
+- Check Settings → Privacy for your excluded apps list
+</Warning>
+
+<Tip>
+If you notice gaps in your timeline, the daemon may have been paused or the system was in sleep mode. Check daemon logs for context.
+</Tip>
+
+## Related Features
+
+- **[Search](/features/search)** — Find specific content instead of browsing by time
+- **[Dashboard](/features/dashboard)** — See aggregate analytics across all time
+- **[Focus Mode](/features/focus-mode)** — Track productivity and minimize distractions
+
+## Technical Details
+
+History view uses these API endpoints:
+
+- `browseScreenshots(start, end, app, limit)` — Fetch screenshots in time range
+- `getActivity(start, end)` — Get app usage and activity stats
+- `getActiveBlocks(start, end)` — Fetch active time blocks for screen time calculation
+- `getTaskBreakdown(start, end)` — Per-app time estimates
+
+See `src/features/history/hooks/useHistoryData.ts` for implementation details.

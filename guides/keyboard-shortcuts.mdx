@@ -1,0 +1,330 @@
+---
+title: Keyboard Shortcuts
+description: Global hotkeys and keyboard shortcuts for RewindOS
+---
+
+RewindOS provides keyboard shortcuts for quick access to search and navigation.
+
+## Global Hotkeys
+
+Global hotkeys work system-wide, even when RewindOS is minimized or in the background.
+
+### Open Search Window
+
+<CodeGroup>
+
+```text Default
+Ctrl+Shift+Space
+```
+
+</CodeGroup>
+
+Press `Ctrl+Shift+Space` from anywhere to:
+- Show the RewindOS window if hidden
+- Unminimize if minimized
+- Focus the search input automatically
+
+<Info>
+The global hotkey is configured via `tauri-plugin-global-shortcut` and registered on app startup.
+</Info>
+
+### Customize Global Hotkey
+
+Edit `~/.rewindos/config.toml`:
+
+```toml
+[ui]
+global_hotkey = "Ctrl+Shift+Space"  # Change to your preferred combination
+theme = "system"
+```
+
+**Supported modifiers:**
+- `Ctrl`
+- `Shift`
+- `Alt`
+- `Super` (Windows/Command key)
+
+**Example alternatives:**
+
+<Accordion title="Alternative Hotkey Combinations">
+
+```toml
+# Alt + Space (like Spotlight on macOS)
+global_hotkey = "Alt+Space"
+
+# Ctrl + ` (backtick)
+global_hotkey = "Ctrl+`"
+
+# Super + S
+global_hotkey = "Super+S"
+
+# Ctrl + Alt + R
+global_hotkey = "Ctrl+Alt+R"
+```
+
+</Accordion>
+
+<Warning>
+Choose a hotkey that doesn't conflict with your desktop environment or other applications. Some combinations like `Alt+Space` may be reserved by your window manager.
+</Warning>
+
+### Restart After Changing Hotkey
+
+After editing `config.toml`, restart the UI app for changes to take effect:
+
+```bash
+# Kill the running app
+pkillall rewindos
+
+# Restart
+rewindos
+```
+
+Or simply log out and log back in.
+
+## Application Shortcuts
+
+These shortcuts work when the RewindOS window is focused.
+
+### Search View
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+K` | Focus search input |
+| `Escape` | Clear search / close window |
+| `Enter` | Open selected screenshot |
+| `↑` `↓` | Navigate results |
+| `Ctrl+F` | Toggle search filters |
+
+<Note>
+Navigation shortcuts (`↑` `↓` `Enter`) are handled by the frontend React components.
+</Note>
+
+### History/Timeline View
+
+| Shortcut | Action |
+|----------|--------|
+| `←` `→` | Navigate timeline |
+| `Home` | Jump to latest screenshot |
+| `End` | Jump to oldest screenshot |
+| `Space` | Preview selected screenshot |
+
+### Dashboard View
+
+| Shortcut | Action |
+|----------|--------|
+| `R` | Refresh activity data |
+| `T` | Toggle time range selector |
+
+### Ask (AI Chat) View
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Enter` | Send message |
+| `Ctrl+K` | Clear chat history |
+| `Escape` | Cancel streaming response |
+
+### Settings View
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+S` | Save settings |
+| `Escape` | Discard changes |
+
+## System Tray
+
+When minimized to tray, the app continues running in the background.
+
+### Tray Menu Actions
+
+<Steps>
+
+<Step title="Open via tray icon">
+
+Click the RewindOS icon in the system tray to show the menu.
+
+</Step>
+
+<Step title="Quick actions">
+
+- **Show RewindOS** - Opens the main window
+- **Pause Capture** - Temporarily stops screenshots
+- **Resume Capture** - Restarts capture after pause
+- **Quit** - Closes the app (daemon keeps running)
+
+</Step>
+
+</Steps>
+
+<Info>
+The system tray is powered by Tauri's built-in tray API. The daemon continues running even when the UI is closed.
+</Info>
+
+## Implementation Details
+
+### Global Hotkey Registration
+
+From `src-tauri/src/lib.rs`:
+
+```rust
+tauri_plugin_global_shortcut::Builder::new()
+    .with_handler(|app, shortcut, event| {
+        if event.state() == ShortcutState::Pressed {
+            let ctrl_shift_space = Shortcut::new(
+                Some(Modifiers::CONTROL | Modifiers::SHIFT),
+                Code::Space
+            );
+            if shortcut == &ctrl_shift_space {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                    // Emit event so frontend can focus search input
+                    let _ = app.emit("global-shortcut-triggered", ());
+                }
+            }
+        }
+    })
+    .build()
+```
+
+The handler:
+1. Detects `Ctrl+Shift+Space` press
+2. Shows and unminimizes the window
+3. Emits a frontend event to focus the search input
+
+### Frontend Event Handling
+
+The React frontend listens for `global-shortcut-triggered` events:
+
+```typescript
+import { listen } from '@tauri-apps/api/event';
+
+listen('global-shortcut-triggered', () => {
+  // Focus search input
+  searchInputRef.current?.focus();
+});
+```
+
+## Wayland Considerations
+
+On Wayland, global hotkeys have some limitations:
+
+<Warning>
+**Known issues:**
+- Some Wayland compositors restrict global hotkey registration
+- KDE Plasma 6 fully supports global shortcuts via KGlobalAccel
+- GNOME requires additional permissions (see troubleshooting)
+</Warning>
+
+### KDE Plasma Configuration
+
+KDE automatically registers the hotkey when the `.desktop` file is installed:
+
+```
+~/.local/share/applications/com.rewindos.RewindOS.desktop
+```
+
+You can also configure it manually in:
+**System Settings → Shortcuts → Custom Shortcuts**
+
+### GNOME Workarounds
+
+If global hotkeys don't work on GNOME:
+
+1. Install the "AppIndicator" GNOME extension
+2. Grant permission in **Settings → Privacy → Screen Recording**
+3. Use GNOME's built-in keyboard shortcuts:
+   - **Settings → Keyboard → Custom Shortcuts**
+   - Add: `rewindos` command
+   - Assign: `Ctrl+Shift+Space`
+
+## Disabling Global Hotkeys
+
+If you prefer not to use global hotkeys:
+
+1. Edit `~/.rewindos/config.toml`:
+
+```toml
+[ui]
+global_hotkey = ""  # Empty string disables
+```
+
+2. Launch via app menu or system tray instead
+
+<Tip>
+You can also unregister the hotkey at runtime from Settings → General → Global Hotkey.
+</Tip>
+
+## Troubleshooting
+
+### Hotkey Not Working
+
+<Accordion title="Check for conflicts">
+
+1. Verify no other app uses the same combination:
+
+```bash
+# KDE Plasma
+kwriteconfig5 --file kglobalshortcutsrc --list
+
+# GNOME
+gsettings list-recursively org.gnome.desktop.wm.keybindings
+```
+
+2. Try a different hotkey combination in `config.toml`
+
+</Accordion>
+
+<Accordion title="Permission issues on Wayland">
+
+Grant screen recording permission:
+
+**KDE Plasma:**
+- Should work out of the box
+- Check **System Settings → Applications → RewindOS**
+
+**GNOME:**
+- **Settings → Privacy → Screen Recording**
+- Enable for RewindOS
+
+</Accordion>
+
+<Accordion title="Hotkey works but window doesn't appear">
+
+Check if the daemon is running:
+
+```bash
+systemctl --user status rewindos-daemon
+```
+
+Check UI app process:
+
+```bash
+ps aux | grep rewindos
+```
+
+Restart the app:
+
+```bash
+pkillall rewindos && rewindos
+```
+
+</Accordion>
+
+### App Doesn't Minimize to Tray
+
+Ensure system tray support is enabled:
+
+**KDE Plasma:**
+- Right-click panel → **Add Widget → System Tray**
+
+**GNOME:**
+- Install **AppIndicator** extension
+- Enable in **Extensions** app
+
+## See Also
+
+- [Configuration Reference](/configuration/overview) - Full config options
+- [Troubleshooting](/guides/troubleshooting) - Fix common issues
+- [Search](/features/search) - Learn about the search interface

@@ -1,0 +1,362 @@
+---
+title: Focus Mode
+description: Pomodoro timer with productivity tracking, distraction detection, and category-based analytics
+---
+
+Focus mode helps you stay productive with a Pomodoro timer, real-time distraction detection, and detailed activity breakdowns.
+
+## Pomodoro Timer
+
+Use the classic Pomodoro Technique to structure your work:
+
+<Steps>
+  <Step title="Start a focus session">
+    Click the **Play** button to start a work session (default: 25 minutes).
+  </Step>
+  
+  <Step title="Work until the timer ends">
+    The timer counts down. A progress ring shows time remaining.
+  </Step>
+  
+  <Step title="Take a break">
+    When the timer ends, take a short break (default: 5 minutes).
+  </Step>
+  
+  <Step title="Repeat">
+    After 4 sessions, take a long break (default: 15 minutes).
+  </Step>
+</Steps>
+
+### Timer States
+
+The timer displays your current phase:
+
+| Phase | Color | Description |
+|-------|-------|-------------|
+| **Focus** | Cyan | Active work session |
+| **Short Break** | Green | 5-minute break |
+| **Long Break** | Purple | 15-minute break after 4 sessions |
+| **Ready** | Gray | Idle, waiting to start |
+
+### Controls
+
+<CardGroup cols={3}>
+  <Card title="Play" icon="play">
+    Start the current phase timer.
+  </Card>
+  <Card title="Pause" icon="pause">
+    Pause the timer (time freezes).
+  </Card>
+  <Card title="Skip" icon="forward">
+    Skip to the next phase immediately.
+  </Card>
+  <Card title="Reset" icon="rotate-left">
+    Reset all sessions and return to idle.
+  </Card>
+</CardGroup>
+
+### Session Progress
+
+Dots below the timer track your session count:
+
+```
+● ● ○ ○  2/4
+```
+
+- **Filled dots** = completed sessions
+- **Pulsing dot** = current session in progress
+- **Empty dots** = remaining sessions until long break
+
+<Tip>
+The timer continues in the background when you switch views. Check the status indicator in the header to see if a session is active.
+</Tip>
+
+## Productivity Tracking
+
+Focus mode monitors your actual app usage in real-time:
+
+### Activity Metrics
+
+<Tabs>
+  <Tab title="App Switches">
+    **App Switches** tracks how often you change applications.
+    
+    - High switch count = context switching, potential distraction
+    - Low switch count = deep focus
+    
+    Updated live as you work.
+  </Tab>
+  
+  <Tab title="Productive Time">
+    **Productive Time** shows hours/minutes in productive apps.
+    
+    Excludes:
+    - Distraction apps (configured)
+    - Idle time (no activity)
+    - Excluded apps (password managers, etc.)
+    
+    Format: `3h45m`
+  </Tab>
+  
+  <Tab title="Distraction Time">
+    **Distraction Time** tracks minutes in flagged apps.
+    
+    Distraction apps are configured in Settings → Focus → Distraction Apps.
+    
+    Default list:
+    - Discord
+    - Slack (outside work hours)
+    - Twitter / X
+    - Reddit
+  </Tab>
+</Tabs>
+
+### Daily Goal
+
+Set a daily productivity target:
+
+- Default: 8 hours (480 minutes)
+- Configurable in Settings → Focus → Daily Goal
+- Progress bar shows completion percentage
+- Resets at midnight
+
+<Info>
+Daily goal is based on **productive time**, not total screen time. Breaks and distractions don't count.
+</Info>
+
+## Distraction Detection
+
+RewindOS automatically detects when you're using distraction apps:
+
+<Steps>
+  <Step title="Configure distraction apps">
+    Go to Settings → Focus → Distraction Apps and add apps to watch:
+    
+    ```
+    discord, slack, twitter, reddit, youtube
+    ```
+  </Step>
+  
+  <Step title="Automatic tracking">
+    When you switch to a distraction app, it's tracked in real-time.
+  </Step>
+  
+  <Step title="Review distraction time">
+    The **Distracted** metric shows total minutes in these apps today.
+  </Step>
+</Steps>
+
+<Warning>
+Distraction apps are context-dependent. Slack may be productive during work hours but distracting at night. Adjust your list accordingly.
+</Warning>
+
+## Category Breakdown
+
+Apps are automatically categorized for deeper insights:
+
+### Default Categories
+
+| Category | Example Apps |
+|----------|-------------|
+| **Development** | VS Code, Terminal, Git, Docker |
+| **Communication** | Slack, Email, Zoom, Teams |
+| **Browsers** | Firefox, Chrome, Safari |
+| **Design** | Figma, GIMP, Inkscape |
+| **Entertainment** | YouTube, Spotify, Netflix |
+| **Social** | Twitter, Reddit, Discord |
+| **Productivity** | Notion, Obsidian, Calendar |
+| **Other** | Uncategorized apps |
+
+### Custom Category Rules
+
+Create custom categorization in Settings → Focus → Category Rules:
+
+```toml
+[focus.category_rules]
+Work = ["linear", "notion", "vscode"]
+Learning = ["udemy", "coursera", "youtube"]
+Research = ["firefox", "chrome"]
+```
+
+The breakdown shows:
+- Category name with color indicator
+- Total time in that category today
+- Sorted by most-used
+
+<Tip>
+Use categories to identify where your time actually goes. You might be surprised how much "research" time is actually "entertainment".
+</Tip>
+
+## Timer Configuration
+
+Customize Pomodoro durations in Settings → Focus:
+
+<Tabs>
+  <Tab title="Work Duration">
+    **Work Minutes**: 1-90
+    
+    Default: `25`
+    
+    How long each focus session lasts.
+  </Tab>
+  
+  <Tab title="Short Break">
+    **Short Break Minutes**: 1-30
+    
+    Default: `5`
+    
+    Break duration after each work session.
+  </Tab>
+  
+  <Tab title="Long Break">
+    **Long Break Minutes**: 5-60
+    
+    Default: `15`
+    
+    Extended break after completing all sessions.
+  </Tab>
+  
+  <Tab title="Sessions Before Long Break">
+    **Sessions**: 2-8
+    
+    Default: `4`
+    
+    How many work sessions before the long break.
+  </Tab>
+</Tabs>
+
+### Auto-Start Options
+
+<CardGroup cols={2}>
+  <Card title="Auto-Start Breaks" icon="circle-play">
+    Automatically start break timers when work sessions end.
+    
+    Default: **Enabled**
+  </Card>
+  <Card title="Auto-Start Work" icon="briefcase">
+    Automatically start the next work session after breaks.
+    
+    Default: **Disabled**
+    
+    (Most users prefer manual control between work sessions)
+  </Card>
+</CardGroup>
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Deep work sessions">
+    1. Start a Pomodoro timer
+    2. Close distraction apps
+    3. Work until the timer ends
+    4. Review your productivity stats
+    
+    Check app switches — lower is better for deep focus.
+  </Accordion>
+  
+  <Accordion title="Track daily productivity">
+    1. Set a daily goal (e.g., 6 hours productive time)
+    2. Monitor progress throughout the day
+    3. Review category breakdown at end of day
+    4. Adjust distraction apps list if needed
+  </Accordion>
+  
+  <Accordion title="Identify time wasters">
+    1. Check category breakdown after a few days
+    2. Sort by most-used categories
+    3. Add unexpected time sinks to distraction apps list
+    4. Set up Focus mode to stay on track
+  </Accordion>
+  
+  <Accordion title="Structured work routine">
+    1. Configure Pomodoro durations to match your rhythm
+    2. Enable auto-start breaks
+    3. Keep auto-start work disabled for control
+    4. Use skip button if you need to extend/shorten a session
+  </Accordion>
+</AccordionGroup>
+
+## Integration with Other Features
+
+<CardGroup cols={2}>
+  <Card title="Dashboard" icon="chart-simple">
+    Daily goal progress syncs with Dashboard analytics.
+  </Card>
+  <Card title="History" icon="clock-rotate-left">
+    Activity breakdown matches History's category charts.
+  </Card>
+  <Card title="Settings" icon="gear">
+    Configure categories, distraction apps, and timer durations.
+  </Card>
+</CardGroup>
+
+## Performance Notes
+
+- Activity stats update every 30 seconds
+- App usage is calculated from screenshot metadata
+- Distraction detection is real-time (no delay)
+- Timer runs independently of UI (won't pause if window is closed)
+
+<Note>
+Focus mode requires the daemon to be running. If stats aren't updating, check `systemctl --user status rewindos-daemon`.
+</Note>
+
+## Troubleshooting
+
+<Warning>
+**Timer resets unexpectedly**
+
+This is intentional when you:
+- Change time range in History
+- Reload configuration
+- Restart the app
+
+Timer state is **not persisted** across restarts.
+</Warning>
+
+<Warning>
+**Productive time seems low**
+
+1. Check your distraction apps list — you might be flagging productive apps
+2. Verify excluded apps in Settings → Privacy
+3. Look at category breakdown to see where time is actually going
+4. Review app categorization rules
+</Warning>
+
+<Warning>
+**Daily goal not resetting**
+
+Daily goal resets at midnight system time. Check your system clock is correct.
+</Warning>
+
+<Tip>
+If you want more granular control, use category rules to split apps into Work and Personal contexts. Example: "Firefox Work" vs "Firefox Personal" by window title patterns.
+</Tip>
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Space` | Play/Pause timer |
+| `→` | Skip to next phase |
+| `r` | Reset timer and sessions |
+| `Escape` | Close Focus view |
+
+## Technical Details
+
+Focus mode is implemented using:
+
+- **Timer**: React `usePomodoroTimer` hook with setInterval (1-second ticks)
+- **Activity tracking**: Queries `browseScreenshots` API with today's range
+- **Categorization**: Client-side rule matching against app names
+- **Distraction detection**: Matches app name against configured list
+
+Timer state is ephemeral (not persisted to database).
+
+See `src/hooks/usePomodoroTimer.ts` and `src/hooks/useFocusScore.ts` for implementation details.
+
+## Related Settings
+
+- **Settings → Focus** — Configure timer, distraction apps, categories, daily goal
+- **Settings → Privacy** — Exclude apps from tracking entirely
+- **Settings → Capture** — Adjust capture interval for more/less granular tracking

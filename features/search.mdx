@@ -1,0 +1,274 @@
+---
+title: Search
+description: Full-text and semantic search across your screen history with advanced filtering and deduplication
+---
+
+RewindOS provides powerful search capabilities to find anything you've seen on your screen. Search uses OCR-extracted text from your screenshots, with optional AI-powered semantic search for natural language queries.
+
+## Search Modes
+
+RewindOS automatically selects the best search mode based on your configuration:
+
+<CardGroup cols={2}>
+  <Card title="Keyword Search" icon="magnifying-glass">
+    Fast full-text search using SQLite FTS5. Works without Ollama.
+  </Card>
+  <Card title="Semantic Search" icon="sparkles">
+    AI-powered hybrid search that understands meaning and context. Requires Ollama.
+  </Card>
+</CardGroup>
+
+### Keyword Search (FTS5)
+
+When Ollama is not available, RewindOS uses SQLite's FTS5 full-text search engine:
+
+- Exact word matching with stemming
+- Fast and lightweight (no AI required)
+- Snippet highlighting with `<mark>` tags
+- Supports basic search operators
+
+### Semantic Search (Hybrid Mode)
+
+When Ollama is running with `nomic-embed-text`, RewindOS automatically enables hybrid search:
+
+- Combines keyword and vector similarity search
+- Understands synonyms and related concepts
+- Uses Reciprocal Rank Fusion (RRF) to merge results
+- Better for natural language queries
+
+The search mode indicator appears next to your results:
+- **"ai search"** (purple) = hybrid mode active
+- **"keyword"** (gray) = FTS5-only mode
+
+## Search Syntax
+
+<Tabs>
+  <Tab title="Basic Search">
+    Simply type your query to search all OCR text:
+
+    ```
+    docker compose
+    ```
+
+    Finds screenshots containing "docker" and "compose" (in any order).
+  </Tab>
+  
+  <Tab title="Phrase Search">
+    Use quotes for exact phrases:
+
+    ```
+    "error: command not found"
+    ```
+
+    Matches the exact phrase in order.
+  </Tab>
+  
+  <Tab title="Boolean Operators">
+    Combine terms with AND, OR, NOT:
+
+    ```
+    python AND flask NOT django
+    ```
+
+    FTS5 supports standard boolean logic.
+  </Tab>
+  
+  <Tab title="Prefix Matching">
+    Use `*` for prefix search:
+
+    ```
+    data*
+    ```
+
+    Matches "database", "dataset", "dataframe", etc.
+  </Tab>
+</Tabs>
+
+## Filters
+
+Refine your search with time-based and app-specific filters.
+
+### Time Range Filters
+
+Filter by when the screenshot was captured:
+
+<Steps>
+  <Step title="Select a preset">
+    Click one of the quick filters:
+    - **All** — Search everything
+    - **Today** — Last 24 hours
+    - **Yesterday** — Previous day
+    - **7d** — Last 7 days
+    - **30d** — Last 30 days
+  </Step>
+  
+  <Step title="Pick a custom date">
+    Click the calendar icon to select a specific day.
+  </Step>
+</Steps>
+
+### App Filter
+
+Limit search to specific applications:
+
+<Steps>
+  <Step title="View available apps">
+    The search bar shows your 12 most recent apps with color-coded dots.
+  </Step>
+  
+  <Step title="Select an app">
+    Click an app name to filter. Click again to clear.
+  </Step>
+  
+  <Step title="Browse more apps">
+    Use the "More..." dropdown for additional apps.
+  </Step>
+</Steps>
+
+<Info>
+App names are automatically extracted from window metadata at capture time (e.g., `firefox`, `code`, `slack`).
+</Info>
+
+## Scene Deduplication
+
+RewindOS automatically groups visually similar screenshots to reduce clutter.
+
+### How It Works
+
+<Steps>
+  <Step title="Perceptual hashing">
+    Each screenshot gets an 8×8 gradient hash at capture time using the `image-hasher` crate.
+  </Step>
+  
+  <Step title="Post-search grouping">
+    After search, results are grouped by comparing perceptual hash hamming distance.
+  </Step>
+  
+  <Step title="Threshold matching">
+    Screenshots with hamming distance ≤ 5 are considered duplicates and grouped together.
+  </Step>
+  
+  <Step title="Representative selection">
+    The highest-ranked result becomes the group representative.
+  </Step>
+</Steps>
+
+### Duplicate Badges
+
+When duplicates are found, you'll see badges on result cards:
+
+- **Grid view**: `+N similar` badge in top-right corner
+- **List view**: `+N` badge on thumbnail
+
+Click any grouped result to view all screenshots in the group.
+
+<Note>
+Scene dedup happens **after** search, not during capture. This ensures you can still find all variations if needed.
+</Note>
+
+## Search Results
+
+### View Modes
+
+Toggle between grid and list views using the view switcher:
+
+<Tabs>
+  <Tab title="Grid View">
+    Visual thumbnail grid with:
+    - Screenshot previews (aspect-video ratio)
+    - App name with color dot
+    - Relative timestamp
+    - Hover overlay shows matched OCR text
+    - Duplicate count badges
+  </Tab>
+  
+  <Tab title="List View">
+    Compact list with:
+    - Inline thumbnails (112×72px)
+    - Full metadata (app, title, timestamp)
+    - Matched text snippet with highlights
+    - Duplicate badges on thumbnails
+  </Tab>
+</Tabs>
+
+### Text Highlighting
+
+Matched text appears with highlighted terms:
+
+```html
+...installed <mark>docker</mark> and <mark>compose</mark> successfully...
+```
+
+Snippets are generated by FTS5 using the `snippet()` function with 32-word context windows.
+
+## Performance Tips
+
+<AccordionGroup>
+  <Accordion title="Enable Ollama for better results">
+    Install Ollama and pull `nomic-embed-text` to enable semantic search:
+    
+    ```bash
+    ollama pull nomic-embed-text
+    ```
+    
+    The daemon will auto-detect Ollama on startup and enable hybrid search.
+  </Accordion>
+  
+  <Accordion title="Use specific queries">
+    More specific queries return better results:
+    - ❌ "work" (too broad)
+    - ✅ "quarterly sales report" (specific)
+  </Accordion>
+  
+  <Accordion title="Combine filters">
+    Use app + time filters to narrow results:
+    - Filter by app: `slack`
+    - Time range: Last 7 days
+    - Query: "meeting notes"
+  </Accordion>
+  
+  <Accordion title="Check OCR quality">
+    OCR works best on:
+    - High-contrast text
+    - Standard fonts at readable sizes
+    - Clean screenshots (not heavily compressed)
+    
+    If text isn't found, check the screenshot detail view to see what OCR extracted.
+  </Accordion>
+</AccordionGroup>
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `/` | Focus search input |
+| `Enter` | Execute search |
+| `Escape` | Clear search query |
+| `Ctrl+Shift+Space` | Open/focus RewindOS window (global) |
+
+## Troubleshooting
+
+<Warning>
+If search returns no results but you know the text exists:
+1. Check the screenshot in detail view to see OCR output
+2. Verify OCR is enabled in Settings → OCR
+3. Check that the daemon is running (`systemctl --user status rewindos-daemon`)
+4. Look for tesseract errors in daemon logs
+</Warning>
+
+<Tip>
+Semantic search works best for conceptual queries like "how to deploy kubernetes" while keyword search is better for exact technical terms like error codes.
+</Tip>
+
+## Technical Details
+
+For developers interested in how search works:
+
+- **FTS5 tokenizer**: `unicode61 remove_diacritics 2`
+- **Vector dimensions**: 768 (nomic-embed-text)
+- **RRF constant**: k=60
+- **Dedup threshold**: hamming distance ≤ 5
+- **Over-fetch ratio**: 3x limit (max 300 raw results)
+- **Database**: SQLite with bundled FTS5 and sqlite-vec extensions
+
+See `crates/rewindos-core/src/db.rs` for implementation details.
